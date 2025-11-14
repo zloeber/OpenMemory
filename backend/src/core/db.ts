@@ -61,6 +61,7 @@ type q_type = {
     get_namespace: { get: (namespace: string) => Promise<any> };
     all_namespaces: { all: () => Promise<any[]> };
     ins_access_log: { run: (...p: any[]) => Promise<void> };
+    get_agent_access_log: { all: (agent_id: string, limit?: number) => Promise<any[]> };
 };
 
 let run_async: (sql: string, p?: any[]) => Promise<void>;
@@ -531,6 +532,13 @@ if (is_pg) {
                     p,
                 ),
         },
+        get_agent_access_log: {
+            all: (agent_id: string, limit = 10) =>
+                all_async(
+                    `select * from "${sc}"."agent_access_log" where agent_id=$1 order by timestamp desc limit $2`,
+                    [agent_id, limit],
+                ),
+        },
     };
 } else {
     const db_path = env.db_path || "./data/openmemory.sqlite";
@@ -545,8 +553,8 @@ if (is_pg) {
         db.run("PRAGMA mmap_size=134217728");
         db.run("PRAGMA foreign_keys=OFF");
         db.run("PRAGMA wal_autocheckpoint=20000");
-        db.run("PRAGMA locking_mode=EXCLUSIVE");
-        db.run("PRAGMA busy_timeout=50");
+        db.run("PRAGMA locking_mode=NORMAL"); // Changed from EXCLUSIVE to allow MCP access
+        db.run("PRAGMA busy_timeout=5000"); // Increased timeout to handle concurrent access
         db.run(
             `create table if not exists memories(id text primary key,user_id text,segment integer default 0,content text not null,simhash text,primary_sector text not null,tags text,meta text,created_at integer,updated_at integer,last_seen_at integer,salience real,decay_lambda real,version integer default 1,mean_dim integer,mean_vec blob,compressed_vec blob,feedback_score real default 0)`,
         );
@@ -928,6 +936,13 @@ if (is_pg) {
                 exec(
                     "insert into agent_access_log(agent_id,operation,namespace,timestamp,success,error_message) values(?,?,?,?,?,?)",
                     p,
+                ),
+        },
+        get_agent_access_log: {
+            all: (agent_id, limit = 10) =>
+                many(
+                    "select * from agent_access_log where agent_id=? order by timestamp desc limit ?",
+                    [agent_id, limit],
                 ),
         },
     };
