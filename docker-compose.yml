@@ -155,13 +155,10 @@ services:
       # Dashboard Configuration
       - NODE_ENV=production
       - PORT=3000
-      
       # OpenMemory Backend URL - Points to main service
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://openmemory:8080}
-      
       # Optional: API key if backend has authentication enabled
       - NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-}
-      
       # Dashboard specific settings
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-OpenMemory Dashboard}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-2.1.0}

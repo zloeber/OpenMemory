@@ -55,11 +55,14 @@ type q_type = {
     get_agent_by_api_key: { get: (api_key: string) => Promise<any> };
     all_agents: { all: () => Promise<any[]> };
     upd_agent_access: { run: (agent_id: string, timestamp: number) => Promise<void> };
+    deactivate_agent: { run: (agent_id: string, timestamp: number) => Promise<void> };
     ins_namespace: { run: (...p: any[]) => Promise<void> };
     upd_namespace: { run: (...p: any[]) => Promise<void> };
     del_namespace: { run: (namespace: string) => Promise<void> };
     get_namespace: { get: (namespace: string) => Promise<any> };
     all_namespaces: { all: () => Promise<any[]> };
+    clear_namespace_creator: { run: (agent_id: string) => Promise<void> };
+    deactivate_namespace: { run: (namespace: string, timestamp: number) => Promise<void> };
     ins_access_log: { run: (...p: any[]) => Promise<void> };
     get_agent_access_log: { all: (agent_id: string, limit?: number) => Promise<any[]> };
 };
@@ -491,17 +494,24 @@ if (is_pg) {
                     [agent_id, timestamp],
                 ),
         },
+        deactivate_agent: {
+            run: (agent_id, timestamp) =>
+                run_async(
+                    `update "${sc}"."agent_registrations" set active=0,last_access=$2 where agent_id=$1`,
+                    [agent_id, timestamp],
+                ),
+        },
         ins_namespace: {
             run: (...p) =>
                 run_async(
-                    `insert into "${sc}"."namespace_groups"(namespace,group_type,description,created_by,created_at,updated_at,active) values($1,$2,$3,$4,$5,$6,$7) on conflict(namespace) do update set group_type=excluded.group_type,description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
+                    `insert into "${sc}"."namespace_groups"(namespace,description,created_by,created_at,updated_at,active) values($1,$2,$3,$4,$5,$6) on conflict(namespace) do update set description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
                     p,
                 ),
         },
         upd_namespace: {
             run: (...p) =>
                 run_async(
-                    `update "${sc}"."namespace_groups" set group_type=$2,description=$3,updated_at=$4 where namespace=$1`,
+                    `update "${sc}"."namespace_groups" set description=$2,updated_at=$3 where namespace=$1`,
                     p,
                 ),
         },
@@ -523,6 +533,20 @@ if (is_pg) {
             all: () =>
                 all_async(
                     `select * from "${sc}"."namespace_groups" where active=1 order by created_at desc`,
+                ),
+        },
+        clear_namespace_creator: {
+            run: (agent_id) =>
+                run_async(
+                    `update "${sc}"."namespace_groups" set created_by=NULL where created_by=$1`,
+                    [agent_id],
+                ),
+        },
+        deactivate_namespace: {
+            run: (namespace, timestamp) =>
+                run_async(
+                    `update "${sc}"."namespace_groups" set active=0,updated_at=$2 where namespace=$1`,
+                    [namespace, timestamp],
                 ),
         },
         ins_access_log: {
@@ -905,17 +929,21 @@ if (is_pg) {
             run: (agent_id, timestamp) =>
                 exec("update agent_registrations set last_access=? where agent_id=?", [timestamp, agent_id]),
         },
+        deactivate_agent: {
+            run: (agent_id, timestamp) =>
+                exec("update agent_registrations set active=0,last_access=? where agent_id=?", [timestamp, agent_id]),
+        },
         ins_namespace: {
             run: (...p) =>
                 exec(
-                    "insert or replace into namespace_groups(namespace,group_type,description,created_by,created_at,updated_at,active) values(?,?,?,?,?,?,?)",
+                    "insert or replace into namespace_groups(namespace,description,created_by,created_at,updated_at,active) values(?,?,?,?,?,?)",
                     p,
                 ),
         },
         upd_namespace: {
             run: (...p) =>
                 exec(
-                    "update namespace_groups set group_type=?,description=?,updated_at=? where namespace=?",
+                    "update namespace_groups set description=?,updated_at=? where namespace=?",
                     p,
                 ),
         },
@@ -930,6 +958,14 @@ if (is_pg) {
         all_namespaces: {
             all: () =>
                 many("select * from namespace_groups where active=1 order by created_at desc"),
+        },
+        clear_namespace_creator: {
+            run: (agent_id) =>
+                exec("update namespace_groups set created_by=NULL where created_by=?", [agent_id]),
+        },
+        deactivate_namespace: {
+            run: (namespace, timestamp) =>
+                exec("update namespace_groups set active=0,updated_at=? where namespace=?", [timestamp, namespace]),
         },
         ins_access_log: {
             run: (...p) =>

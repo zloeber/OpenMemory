@@ -426,6 +426,9 @@ export default function settings() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState("")
+    const [showCurrentEnv, setShowCurrentEnv] = useState(false)
+    const [isReadOnly, setIsReadOnly] = useState(false)
+    const [configSource, setConfigSource] = useState<string>('')
 
     useEffect(() => {
         loadSettings()
@@ -441,10 +444,12 @@ export default function settings() {
 
             const data = await response.json()
             setSettings(data.settings || {})
+            setConfigSource(data.source || 'file')
+            setIsReadOnly(data.source === 'environment')
             setLoading(false)
         } catch (error) {
             console.error("Error loading settings:", error)
-            setMessage("Failed to load settings. Check if .env file exists in root directory.")
+            setMessage("Failed to load settings. Check configuration.")
             setLoading(false)
         }
     }
@@ -527,6 +532,20 @@ export default function settings() {
         <div className="min-h-screen pb-20">
             <h1 className="text-white text-2xl mb-6">Settings</h1>
 
+            {isReadOnly && (
+                <div className="mb-4 p-4 rounded-xl bg-amber-950/50 border border-amber-900 text-amber-200">
+                    <div className="flex items-start gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-5 flex-shrink-0 mt-0.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        </svg>
+                        <div>
+                            <strong>Read-Only Mode:</strong> Settings are loaded from environment variables (Docker/container mode). 
+                            To modify settings, update your <code className="bg-amber-900/50 px-1 rounded">docker-compose.yml</code> or <code className="bg-amber-900/50 px-1 rounded">.env</code> file and restart the containers.
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {message && (
                 <div className="mb-4 p-4 rounded-xl bg-blue-950/50 border border-blue-900 text-blue-200">
                     {message}
@@ -564,7 +583,8 @@ export default function settings() {
                                             <select
                                                 value={value}
                                                 onChange={e => handleInputChange(key, e.target.value)}
-                                                className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-sm text-stone-200 focus:outline-none focus:border-stone-700"
+                                                disabled={isReadOnly}
+                                                className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-sm text-stone-200 focus:outline-none focus:border-stone-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 {meta.options?.map(opt => (
                                                     <option key={opt} value={opt}>{opt || '(auto)'}</option>
@@ -576,7 +596,8 @@ export default function settings() {
                                                 value={value}
                                                 onChange={e => handleInputChange(key, e.target.value)}
                                                 placeholder={meta?.placeholder}
-                                                className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-sm text-stone-200 focus:outline-none focus:border-stone-700"
+                                                disabled={isReadOnly}
+                                                className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-sm text-stone-200 focus:outline-none focus:border-stone-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
                                         )}
                                     </div>
@@ -586,16 +607,103 @@ export default function settings() {
                     </fieldset>
                 ))}
 
+                <fieldset className="rounded-3xl border border-stone-900 bg-stone-950 p-6">
+                    <legend className="text-white font-semibold px-2 flex items-center gap-2 cursor-pointer" onClick={() => setShowCurrentEnv(!showCurrentEnv)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={`size-5 text-sky-500 transition-transform ${showCurrentEnv ? 'rotate-90' : ''}`}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                        </svg>
+                        Current Configuration
+                    </legend>
+                    {showCurrentEnv && (
+                        <div className="mt-4 space-y-4">
+                            <div className="bg-stone-900/50 rounded-xl p-4 border border-stone-800">
+                                <h3 className="text-sm font-medium text-stone-300 mb-3 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-4 text-emerald-500">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                    Environment Variables
+                                </h3>
+                                <div className="space-y-2 text-sm font-mono">
+                                    {Object.entries(settings).length > 0 ? (
+                                        Object.entries(settings).map(([key, value]) => (
+                                            <div key={key} className="flex items-start gap-3 p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                                <span className="text-cyan-400 font-medium min-w-[200px]">{key}</span>
+                                                <span className="text-stone-400 break-all">
+                                                    {key.includes('KEY') || key.includes('PASSWORD') ? '••••••••' : (value || '(empty)')}
+                                                </span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-stone-500 italic">No environment variables configured</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="bg-stone-900/50 rounded-xl p-4 border border-stone-800">
+                                <h3 className="text-sm font-medium text-stone-300 mb-3 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-4 text-blue-500">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z" />
+                                    </svg>
+                                    System Configuration
+                                </h3>
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                        <span className="text-stone-400">Configuration Source</span>
+                                        <span className={`font-medium ${configSource === 'environment' ? 'text-sky-400' : 'text-emerald-400'}`}>
+                                            {configSource === 'environment' ? 'Environment Variables' : '.env File'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                        <span className="text-stone-400">Dashboard API URL</span>
+                                        <span className="text-stone-200 font-mono">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}</span>
+                                    </div>
+                                    <div className="flex justify-between p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                        <span className="text-stone-400">Dashboard API Key Set</span>
+                                        <span className={`font-medium ${process.env.NEXT_PUBLIC_API_KEY ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                            {process.env.NEXT_PUBLIC_API_KEY ? '✓ Yes' : '✗ No'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                        <span className="text-stone-400">Total Settings Configured</span>
+                                        <span className="text-stone-200 font-medium">{Object.keys(settings).length}</span>
+                                    </div>
+                                    <div className="flex justify-between p-2 rounded bg-stone-950/50 border border-stone-800/50">
+                                        <span className="text-stone-400">Config File Path</span>
+                                        <span className="text-stone-200 font-mono text-xs">../.env</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-5 text-amber-400 flex-shrink-0 mt-0.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                    </svg>
+                                    <div className="text-sm text-amber-200">
+                                        <p className="font-medium mb-1">Important Notes:</p>
+                                        <ul className="list-disc list-inside space-y-1 text-amber-300/90">
+                                            <li>Changes require backend restart to take effect</li>
+                                            <li>API keys are masked in this view for security</li>
+                                            <li>Dashboard uses NEXT_PUBLIC_* environment variables</li>
+                                            <li>Backend uses OM_* environment variables</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </fieldset>
+
                 <div className="flex gap-3">
                     <button
                         onClick={handlesave}
-                        disabled={saving}
+                        disabled={saving || isReadOnly}
                         className="flex-1 rounded-full p-3 pl-4 bg-blue-600 hover:bg-blue-700 border border-blue-700 transition-colors flex items-center justify-center gap-2 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.75V16.5L12 14.25 7.5 16.5V3.75m9 0H18A2.25 2.25 0 0 1 20.25 6v12A2.25 2.25 0 0 1 18 20.25H6A2.25 2.25 0 0 1 3.75 18V6A2.25 2.25 0 0 1 6 3.75h1.5m9 0h-9" />
                         </svg>
-                        {saving ? "Saving..." : "Save to .env"}
+                        {saving ? "Saving..." : isReadOnly ? "Read-Only Mode" : "Save to .env"}
                     </button>
                     <button
                         onClick={loadSettings}

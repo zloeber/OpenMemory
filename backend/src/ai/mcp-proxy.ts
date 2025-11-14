@@ -25,7 +25,6 @@ interface AgentRegistration {
 
 interface NamespaceGroup {
     namespace: string;
-    group_type: 'private' | 'shared' | 'public';
     description?: string;
     created_by?: string;
     created_at: number;
@@ -143,7 +142,6 @@ export class OpenMemoryMCPProxy {
                 if (!this.namespaces.has(namespace)) {
                     const namespaceGroup: NamespaceGroup = {
                         namespace,
-                        group_type: 'private',
                         description: `Private namespace for agent ${agent_id}`,
                         created_by: agent_id,
                         created_at: Date.now()
@@ -151,7 +149,6 @@ export class OpenMemoryMCPProxy {
 
                     await q.ins_namespace.run(
                         namespace,
-                        'private',
                         namespaceGroup.description,
                         agent_id,
                         now,
@@ -642,9 +639,14 @@ Ready to start using OpenMemory! 🚀`;
             // Check if agent_registrations table exists before trying to load data
             const tableExists = await this.checkTableExists('agent_registrations');
             if (!tableExists) {
+                this.agents.clear();
+                this.namespaces.clear();
                 console.log(`[MCP Proxy] Agent registration tables not found, skipping data load. Run migration to create tables.`);
                 return;
             }
+
+            this.agents.clear();
+            this.namespaces.clear();
 
             // Load agents from database
             const agents = await q.all_agents.all();
@@ -666,7 +668,6 @@ Ready to start using OpenMemory! 🚀`;
             for (const ns of namespaces) {
                 this.namespaces.set(ns.namespace, {
                     namespace: ns.namespace,
-                    group_type: ns.group_type,
                     description: ns.description,
                     created_by: ns.created_by,
                     created_at: ns.created_at * 1000
@@ -679,11 +680,31 @@ Ready to start using OpenMemory! 🚀`;
         }
     }
 
+    public async refreshCache(): Promise<void> {
+        await this.loadPersistedData();
+    }
+
     private async checkTableExists(tableName: string): Promise<boolean> {
         try {
-            const result = await get_async(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [tableName]);
+            if (env.metadata_backend === "postgres") {
+                const schema = process.env.OM_PG_SCHEMA || "public";
+                const qualified = tableName.includes(".")
+                    ? tableName
+                    : `${schema}.${tableName}`;
+                const result = await get_async(
+                    "SELECT to_regclass($1) as tbl",
+                    [qualified],
+                );
+                return !!result?.tbl;
+            }
+
+            const result = await get_async(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                [tableName],
+            );
             return !!result;
         } catch (error) {
+            console.warn("[MCP Proxy] checkTableExists failed:", error);
             return false;
         }
     }

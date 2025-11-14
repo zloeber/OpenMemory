@@ -109,6 +109,3 @@ configs:
           - json
       valkey:
         url: valkey://valkey:6379/0
-  qdrant_config:
-    content: |
-      log_level: INFO

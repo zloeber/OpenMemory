@@ -37,22 +37,15 @@ export default function memories() {
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [editingMem, setEditingMem] = useState<mem | null>(null)
     const [deletingMemId, setDeletingMemId] = useState<string | null>(null)
-    const [apiKey, setApiKey] = useState<string>('')
 
+    const hasApiKey = Boolean((process.env.NEXT_PUBLIC_API_KEY || "").trim())
     const limit = 1000
 
     useEffect(() => {
-        const key = process.env.NEXT_PUBLIC_API_KEY
-        if (key) {
-            setApiKey(key)
-        }
-    }, [])
-
-    useEffect(() => {
-        if (apiKey) {
+        if (hasApiKey) {
             fetchMems()
         }
-    }, [page, filt, apiKey])
+    }, [page, filt, hasApiKey])
 
     async function fetchMems() {
         setloading(true)
@@ -117,7 +110,7 @@ export default function memories() {
                 body: JSON.stringify({
                     content,
                     tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-                    metadata: { primary_sector: sector },
+                    metadata: { sector: sector },
                 }),
             })
             if (!res.ok) throw new Error('failed to add memory')
@@ -178,7 +171,7 @@ export default function memories() {
                 <h1 className="text-white text-2xl">Memory Topology</h1>
                 <button
                     onClick={() => setShowAddModal(true)}
-                    disabled={!apiKey}
+                    disabled={!hasApiKey}
                     className="rounded-xl p-2 px-4 bg-sky-500 hover:bg-sky-600 text-white flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5"><path fillRule="evenodd" d="M12 3.75a.75.75 0 0 1 .75.75v6.75h6.75a.75.75 0 0 1 0 1.5h-6.75v6.75a.75.75 0 0 1-1.5 0v-6.75H4.5a.75.75 0 0 1 0-1.5h6.75V4.5a.75.75 0 0 1 .75-.75Z" clipRule="evenodd" /></svg>

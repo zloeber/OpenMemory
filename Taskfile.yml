@@ -284,4 +284,12 @@ tasks:
     cmds:
       - |
         git fetch upstream
-        git merge upstream/main
+        git merge upstream/
+
+  run:dashboard:
+    desc: Run the dashboard
+    dir: ./dashboard
+    cmds:
+      - |
+        npm install
+      - npm run dev
