@@ -1,13 +1,16 @@
 [project]
 name = "crewai_memory_middleware"
 version = "0.1.0"
-description = "crewai-memory-middleware using crewAI"
+description = "crewai-memory-middleware using crewAI with OpenMemory integration"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "crewai[tools]==1.4.1",
     "litellm>=1.79.3",
 ]
+
+# For local development, the OpenMemory SDK is imported via sys.path
+# For production use, you would install it via: pip install -e ../../sdk-py
 
 [project.scripts]
 crewai_memory_middleware = "crewai_memory_middleware.main:run"
