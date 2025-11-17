@@ -1,0 +1,83 @@
+# Production Docker Compose configuration for OpenMemory
+# This configuration includes production-optimized settings
+# 
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Features:
+# - Production resource limits
+# - Optimized health checks
+# - JSON logging
+# - Network isolation
+# - Security hardening
+
+services:
+  qdrant:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      - openmemory-network
+
+  openmemory:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      - openmemory-network
+    environment:
+      # Production settings
+      - NODE_ENV=production
+      - OM_RATE_LIMIT_ENABLED=true
+      - OM_RATE_LIMIT_MAX_REQUESTS=1000
+      # Use Qdrant in production
+      - OM_VECTOR_BACKEND=qdrant
+
+  openmemory-dashboard:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      - openmemory-network
+
+networks:
+  openmemory-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

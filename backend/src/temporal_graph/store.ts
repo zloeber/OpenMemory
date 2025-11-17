@@ -3,6 +3,7 @@ import { TemporalFact, TemporalEdge } from './types'
 import { randomUUID } from 'crypto'
 
 export const insert_fact = async (
+    namespace: string,
     subject: string,
     predicate: string,
     object: string,
@@ -16,9 +17,9 @@ export const insert_fact = async (
 
     const existing = await all_async(`
         SELECT id, valid_from FROM temporal_facts 
-        WHERE subject = ? AND predicate = ? AND valid_to IS NULL
+        WHERE namespace = ? AND subject = ? AND predicate = ? AND valid_to IS NULL
         ORDER BY valid_from DESC
-    `, [subject, predicate])
+    `, [namespace, subject, predicate])
 
     for (const old of existing) {
         if (old.valid_from < valid_from_ts) {
@@ -28,11 +29,11 @@ export const insert_fact = async (
     }
 
     await run_async(`
-        INSERT INTO temporal_facts (id, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
-    `, [id, subject, predicate, object, valid_from_ts, confidence, now, metadata ? JSON.stringify(metadata) : null])
+        INSERT INTO temporal_facts (id, namespace, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+    `, [id, namespace, subject, predicate, object, valid_from_ts, confidence, now, metadata ? JSON.stringify(metadata) : null])
 
-    console.error(`[TEMPORAL] Inserted fact: ${subject} ${predicate} ${object} (from ${valid_from.toISOString()}, confidence=${confidence})`) // Use stderr for MCP compatibility
+    console.error(`[TEMPORAL] Inserted fact in ${namespace}: ${subject} ${predicate} ${object} (from ${valid_from.toISOString()}, confidence=${confidence})`) // Use stderr for MCP compatibility
     return id
 }
 
@@ -72,6 +73,7 @@ export const delete_fact = async (id: string): Promise<void> => {
 }
 
 export const insert_edge = async (
+    namespace: string,
     source_id: string,
     target_id: string,
     relation_type: string,
@@ -83,11 +85,11 @@ export const insert_edge = async (
     const valid_from_ts = valid_from.getTime()
 
     await run_async(`
-        INSERT INTO temporal_edges (id, source_id, target_id, relation_type, valid_from, valid_to, weight, metadata)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
-    `, [id, source_id, target_id, relation_type, valid_from_ts, weight, metadata ? JSON.stringify(metadata) : null])
+        INSERT INTO temporal_edges (id, namespace, source_id, target_id, relation_type, valid_from, valid_to, weight, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+    `, [id, namespace, source_id, target_id, relation_type, valid_from_ts, weight, metadata ? JSON.stringify(metadata) : null])
 
-    console.log(`[TEMPORAL] Created edge: ${source_id} --[${relation_type}]--> ${target_id}`)
+    console.log(`[TEMPORAL] Created edge in ${namespace}: ${source_id} --[${relation_type}]--> ${target_id}`)
     return id
 }
 
@@ -97,6 +99,7 @@ export const invalidate_edge = async (id: string, valid_to: Date = new Date()): 
 }
 
 export const batch_insert_facts = async (facts: Array<{
+    namespace: string
     subject: string
     predicate: string
     object: string
@@ -110,6 +113,7 @@ export const batch_insert_facts = async (facts: Array<{
     try {
         for (const fact of facts) {
             const id = await insert_fact(
+                fact.namespace,
                 fact.subject,
                 fact.predicate,
                 fact.object,
@@ -129,28 +133,28 @@ export const batch_insert_facts = async (facts: Array<{
     return ids
 }
 
-export const apply_confidence_decay = async (decay_rate: number = 0.01): Promise<number> => {
+export const apply_confidence_decay = async (namespace: string, decay_rate: number = 0.01): Promise<number> => {
     const now = Date.now()
     const one_day = 86400000
 
     await run_async(`
         UPDATE temporal_facts 
         SET confidence = MAX(0.1, confidence * (1 - ? * ((? - valid_from) / ?)))
-        WHERE valid_to IS NULL AND confidence > 0.1
-    `, [decay_rate, now, one_day])
+        WHERE namespace = ? AND valid_to IS NULL AND confidence > 0.1
+    `, [decay_rate, now, one_day, namespace])
 
     const result = await get_async(`SELECT changes() as changes`) as any
     const changes = result?.changes || 0
-    console.log(`[TEMPORAL] Applied confidence decay to ${changes} facts`)
+    console.log(`[TEMPORAL] Applied confidence decay to ${changes} facts in namespace ${namespace}`)
     return changes
 }
 
-export const get_active_facts_count = async (): Promise<number> => {
-    const result = await get_async(`SELECT COUNT(*) as count FROM temporal_facts WHERE valid_to IS NULL`) as any
+export const get_active_facts_count = async (namespace: string): Promise<number> => {
+    const result = await get_async(`SELECT COUNT(*) as count FROM temporal_facts WHERE namespace = ? AND valid_to IS NULL`, [namespace]) as any
     return result?.count || 0
 }
 
-export const get_total_facts_count = async (): Promise<number> => {
-    const result = await get_async(`SELECT COUNT(*) as count FROM temporal_facts`) as any
+export const get_total_facts_count = async (namespace: string): Promise<number> => {
+    const result = await get_async(`SELECT COUNT(*) as count FROM temporal_facts WHERE namespace = ?`, [namespace]) as any
     return result?.count || 0
 }

@@ -657,11 +657,6 @@ export const swaggerSpec = {
                                                 items: { type: 'string' },
                                                 description: 'Agent permissions'
                                             },
-                                            shared_namespaces: {
-                                                type: 'array',
-                                                items: { type: 'string' },
-                                                description: 'Additional accessible namespaces'
-                                            },
                                             description: { type: 'string', description: 'Agent description' },
                                             created_at: { type: 'string', format: 'date-time' },
                                             last_access: { type: 'string', format: 'date-time' }
@@ -702,11 +697,6 @@ export const swaggerSpec = {
                                         default: ['read', 'write'],
                                         description: 'Permissions for the primary namespace'
                                     },
-                                    shared_namespaces: {
-                                        type: 'array',
-                                        items: { type: 'string' },
-                                        description: 'Additional namespaces this agent can access'
-                                    },
                                     description: { 
                                         type: 'string', 
                                         description: 'Agent description for documentation' 
@@ -729,7 +719,6 @@ export const swaggerSpec = {
                                         api_key: { type: 'string', description: 'API key (preserved if agent already exists)' },
                                         namespace: { type: 'string' },
                                         permissions: { type: 'array', items: { type: 'string' } },
-                                        shared_namespaces: { type: 'array', items: { type: 'string' } },
                                         description: { type: 'string' },
                                         message: { type: 'string', description: 'Success message indicating if agent was registered or updated' }
                                     }

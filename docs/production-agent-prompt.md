@@ -22,6 +22,10 @@
 - *Register*: Cross-memory patterns, behavior trends, evolution
 - *Salience factors*: Number of supporting memories, insight depth, actionability
 
+**Temporal**: Time-based, Schedule
+- *Register*: Dates, time of day, schedules, historical facts
+- *Salience factors*: recency, scheduling
+
 ## Decision Logic
 
 1. **Specific event?** → Episodic

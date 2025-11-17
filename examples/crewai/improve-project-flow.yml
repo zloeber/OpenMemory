@@ -1,0 +1,290 @@
+version: "1.0"
+
+description: >
+  A multi-agent crew that improves a project by leveraging path-specific AGENTS.md
+  instructions and shared memory with explicit memory type guidance.
+
+env:
+  CONTEXT7_API_KEY: "{$env:CONTEXT7_API_KEY}"
+  # MCP_SHELL_SEC_CONFIG_FILE: "shell-security.yml"
+  # MCP_SHELL_SECURITY_ENABLED: "true"
+  # MCP_SHELL_LOG_LEVEL: "info"
+  # MCP_SHELL_LOG_FORMAT: "json"
+
+mcps:
+  - name: "sequential-thinking"
+    description: >
+      Breaks down complex tasks into smaller sequential steps for better clarity and execution.
+    args: [ "npx",  "-y", "@modelcontextprotocol/server-sequential-thinking" ]
+    type: "stdio"
+  - name: "server-filesystem"
+    args: [ "npx",  "-y", "@modelcontextprotocol/server-filesystem", "." ]
+    type: "stdio"
+  # - name: "shell"
+  #   description: >
+  #     A shell MCP that executes shell commands with security restrictions.
+  #   type: "stdio"
+  #   args: [ "docker",  "run", "--rm", "-i", "mcp-shell:latest" ]
+  #   env: {
+  #     "MCP_SHELL_SEC_CONFIG_FILE": "shell-security.yml",
+  #     "MCP_SHELL_SECURITY_ENABLED": "true",
+  #     "MCP_SHELL_LOG_LEVEL": "info",
+  #     "MCP_SHELL_LOG_FORMAT": "json"
+  #   }
+  - name: "searxng"
+    description: >
+      A web search MCP using SearxNG as the backend search engine.
+    type: "stdio"
+    args: [ "npx",  "-y", "mcp-searxng" ]
+    env: {
+      "SEARXNG_URL": "http://localhost:8081"
+    }
+  - name: "openmemory-mcp"
+    description: >
+      An MCP that provides access to OpenMemory's project memory capabilities.
+    type: "http"
+    url: "http://localhost:8080/mcp-proxy"
+  - name: "mcp-feedback-enhanced"
+    description: An MCP that collects multi-choice feedback with enhanced options for agent decision-making.
+    type: "http"
+    url: "http://localhost:9000/mcp"
+  - name: "context7"
+    description: >
+      An MCP that connects to the Context7 platform for advanced and up to date library and frameworks documentation.
+    type: "http"
+    url: "https://mcp.context7.com/mcp"
+    options:
+      {
+      "url": "https://mcp.context7.com/mcp",
+      "gallery": "https://api.mcp.github.com/2025-09-15/v0/servers/dcec7705-b81b-4e0f-8615-8032604be7ad",
+      "version": "1.0.0",
+      "headers": {
+        "CONTEXT7_API_KEY": "{$env:CONTEXT7_API_KEY}"
+      }
+    }
+  - name: "git"
+    description: An MCP that provides git version control operations.
+    type: "stdio"
+    args: [ "uvx",  "mcp-server-git" ]
+  # - name: "github"
+  #   description: >
+  #     An MCP that provides GitHub repository operations.
+  #   type: "http"
+  #   url: "http://localhost:8080/mcp-github-proxy"
+
+inputs:
+  - name: project_path
+    description: "The root path of the project to be improved"
+    type: string
+    default: "."
+  - name: project_id
+    description: "Unique identifier for the project"
+    type: string
+    default: "my_project"
+
+tools:
+  - name: get_memory
+    description: "Retrieve items from the shared project memory namespace"
+  - name: store_memory
+    description: "Store items into the shared project memory namespace"
+  - name: read_file
+    description: "Reads the contents of a file at a path"
+  - name: file_exists
+    description: "Returns true/false whether a given file exists at a path"
+  - name: execute_agent_instruction
+    description: "Executes a text instruction sourced from an AGENTS.md file"
+  - name: sequentialthinking
+    description: "Breaks down complex tasks into smaller sequential steps"
+  - name: write_file
+    description: "Writes content to a file at a specified path"
+  - name: create_directory
+    description: "Creates a directory at the specified path"
+  - name: list_directory
+    description: "Lists files and directories at a specified path"
+  - name: move_file
+    description: "Moves or renames a file from source path to destination path"
+  - name: search_files
+    description: "Searches for files matching a query within the project"
+  - name: get_file_info
+    description: "Retrieves metadata information about a file"
+  - name: read_multiple_files
+    description: "Reads contents from multiple files given their paths"
+  - name: edit_file
+    description: "Edits the contents of a file at a specified path"
+  - name: directory_tree
+    description: "Generates a tree representation of the directory structure"
+  - name: read_text_file
+    description: "Reads the contents of a text file"
+  - name: read_media_file
+    description: "Reads the contents of a media file"
+  - name: list_allowed_directories
+    description: "Lists directories that are allowed for access"
+  - name: list_directory_with_sizes
+    description: "Lists files and directories along with their sizes" 
+  - name: searxng_web_search
+    description: "Performs a web search using SearxNG"
+  - name: web_url_read
+    description: "Reads content from a web URL"
+  - name: query_memory
+    description: "Queries the project memory for relevant information"
+  - name: store_memory
+    description: "Stores information into the project memory"
+  - name: reinforce_memory  
+    description: "Reinforces information in the project memory"
+  - name: interactive_feedback
+    description: "Collects interactive feedback from users"
+  - name: get_system_info
+    description: "Retrieves system information"
+
+agents:
+
+  lead_agent:
+    role: "Lead Project Strategist"
+    allow_delegation: true
+    goal: >
+      Maintain the global project model, identify improvements, and hand off
+      selected spec based prompt to the developer agent to fulfill.
+
+    instructions: |
+      When evaluating improvement areas, you must consider AGENTS.md instructions
+      that are relevant to the target path of the improvement. AGENTS.md files
+      may exist at various levels in the project directory structure. You should
+      look for AGENTS.md files in the target path and its parent directories. 
+
+      **Memory Usage Guidelines:**
+      You have an active memory context that should be utilized to maintain
+      and update the project model, identify improvement areas, and create
+      detailed spec based prompts for the developer agent to follow. 
+      Your memory namespace is {project_id}. Use the following guidelines for each memory type:
+
+      - **Semantic Memory**: project model, architectural knowledge, coding conventions.
+      - **Episodic Memory**: surprising events, prior failed attempts, unique occurrences.
+      - **Procedural Memory**: workflows, steps, processes (if applicable for project model updates).
+      - **Reflective Memory**: reasoning behind improvement selection, lessons learned.
+      - **Emotional Memory**: user feedback or high-impact project signals (optional).
+      - **Temporal Memory**: track changes over time, noting when specific implementations were made and their context.
+
+      **Workflow:**
+      Follow this workflow to evaluate and select improvements for the project in {project_path}:
+      - Retrieve model of project from memory. If not present, initialize it by analyzing the project structure and key files.
+      - Moving forward, always update the project model in memory after significant evaluations or changes. Use git commit hash to
+        determine if a model refresh is needed.
+      - Look for 3 improvement ideas for the project using memory and AGENTS.md context. 
+      - Present and request approval using interactive_feedback.
+      - Upon selection, use sequentialthinking to create a spec based prompt for the developer agent to follow.
+      - Store project model (semantic), reasoning (reflective), and unusual events (episodic). Store other relevant info as needed.
+      - Handoff to developer: selected_improvement, project_model, agent_instructions, target_path.
+
+    tasks:
+      - name: evaluate_project
+        description: >
+          Identify improvement areas in {project_path}, load AGENTS.md for the target path if available,
+          update the project model, propose and select improvements.
+        outputs:
+          - selected_improvement
+          - project_model
+          - agent_instructions
+          - target_path
+
+
+  developer_agent:
+    role: "Implementation Engineer"
+    goal: >
+      Implement (agent_instructions) according to AGENTS.md instructions relevant to the (target_path). 
+
+    instructions: |
+      **Memory Usage Guidelines:**
+      - **Procedural Memory**: implementation steps, reusable patterns, workflow sequences.
+      - **Episodic Memory**: unexpected constraints, edge cases encountered during implementation.
+      - **Reflective Memory**: lessons learned, improvement insights.
+      - **Semantic Memory**: optionally store project metadata discovered during implementation.
+      - **Emotional Memory**: optional signals (e.g., confidence or frustration observations).
+      - **Temporal Memory**: track changes over time, noting when specific implementations were made and their context.
+
+      **Implementation Instructions:**
+      - Create a new git branch to encapsulate changes being made.
+      - Use (agent_instructions) provided by lead to follow for the (target_path) in this new branch.
+      - Retrieve context from shared memory for prior implementations, patterns, and project model.
+      - Save lessons learned and unusual events into memory.
+      - Output a patch and implementation_notes summarizing the changes made.
+      - Handoff to QA: patch, implementation_notes.
+
+    tasks:
+      - name: implement_change
+        description: >
+          Implement the selected improvement using AGENTS.md instructions from the relevant path.
+        inputs:
+          - selected_improvement
+          - project_model
+          - agent_instructions
+          - target_path
+        outputs:
+          - patch
+          - implementation_notes
+
+
+  qa_agent:
+    role: "Quality Assurance Analyst"
+    goal: >
+      Validate the patch using AGENTS.md testing procedures relevant to the target path.
+
+    instructions: |
+      **Memory Usage Guidelines:**
+      - **Episodic Memory**: test failures, regressions, edge-case results.
+      - **Semantic Memory**: patterns of recurring failures, stable test outcomes.
+      - **Reflective Memory**: QA insights, debugging strategies.
+      - **Procedural Memory**: test procedures or workflows if defined.
+      - **Emotional Memory**: optional observations (e.g., impact on confidence, user sentiment).
+      - **Temporal Memory**: track changes over time, noting when specific implementations were made and their context.
+
+      **Testing Instructions:**
+      - Execute testing instructions from AGENTS.md using `execute_agent_instruction`.
+      - Retrieve memory for past failures, flaky areas, or recurring issues.
+      - Store new findings and lessons into memory.
+      - Output test_results for review.
+
+    tasks:
+      - name: test_change
+        description: >
+          Execute testing instructions sourced from AGENTS.md files at the target path.
+        inputs:
+          - patch
+          - implementation_notes
+          - agent_instructions
+          - target_path
+        outputs:
+          - test_results
+
+
+crew:
+  name: "Path-Aware AGENTS.md Project Evolution Crew"
+  description: >
+    Multi-agent system that evolves a project based on path-specific AGENTS.md instructions,
+    using shared memory with explicit memory type guidance.
+  agents:
+    - lead_agent
+    - developer_agent
+    - qa_agent
+
+workflow:
+  - agent: lead_agent
+    task: evaluate_project
+
+  - agent: developer_agent
+    task: implement_change
+
+  - agent: qa_agent
+    task: test_change
+
+llms:
+  - name: ollama
+    provider: "ollama"
+    base_url: "http://linbox5:11434"
+    model: "gpt-oss:latest"
+    temperature: 0.2
+    max_tokens: 4000
+    top_p: 0.9
+    frequency_penalty: 0
+    presence_penalty: 0
+    best_of: 1
+    n: 1

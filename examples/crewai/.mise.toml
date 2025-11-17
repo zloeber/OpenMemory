@@ -1,0 +1,12 @@
+[env]
+_.source = '.envrc'
+
+[settings]
+python.uv_venv_auto = true
+
+[tools]
+python = "3.13"
+uv = "latest"
+yq = "latest"
+jq = 'latest'
+

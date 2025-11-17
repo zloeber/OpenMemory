@@ -4,7 +4,11 @@ import { get_subject_timeline, get_predicate_timeline, get_changes_in_window, co
 
 export const create_temporal_fact = async (req: any, res: any) => {
     try {
-        const { subject, predicate, object, valid_from, confidence, metadata } = req.body
+        const { namespace, subject, predicate, object, valid_from, confidence, metadata } = req.body
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Missing required field: namespace' })
+        }
 
         if (!subject || !predicate || !object) {
             return res.status(400).json({ error: 'Missing required fields: subject, predicate, object' })
@@ -13,10 +17,11 @@ export const create_temporal_fact = async (req: any, res: any) => {
         const valid_from_date = valid_from ? new Date(valid_from) : new Date()
         const conf = confidence !== undefined ? Math.max(0, Math.min(1, confidence)) : 1.0
 
-        const id = await insert_fact(subject, predicate, object, valid_from_date, conf, metadata)
+        const id = await insert_fact(namespace, subject, predicate, object, valid_from_date, conf, metadata)
 
         res.json({
             id,
+            namespace,
             subject,
             predicate,
             object,
@@ -33,7 +38,11 @@ export const create_temporal_fact = async (req: any, res: any) => {
 
 export const get_temporal_fact = async (req: any, res: any) => {
     try {
-        const { subject, predicate, object, at, min_confidence } = req.query
+        const { namespace, subject, predicate, object, at, min_confidence } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!subject && !predicate && !object) {
             return res.status(400).json({ error: 'At least one of subject, predicate, or object is required' })
@@ -42,9 +51,10 @@ export const get_temporal_fact = async (req: any, res: any) => {
         const at_date = at ? new Date(at) : new Date()
         const min_conf = min_confidence ? parseFloat(min_confidence) : 0.1
 
-        const facts = await query_facts_at_time(subject, predicate, object, at_date, min_conf)
+        const facts = await query_facts_at_time(namespace, subject, predicate, object, at_date, min_conf)
 
         res.json({
+            namespace,
             facts,
             query: { subject, predicate, object, at: at_date.toISOString(), min_confidence: min_conf },
             count: facts.length
@@ -58,16 +68,20 @@ export const get_temporal_fact = async (req: any, res: any) => {
 
 export const get_current_temporal_fact = async (req: any, res: any) => {
     try {
-        const { subject, predicate } = req.query
+        const { namespace, subject, predicate } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!subject || !predicate) {
             return res.status(400).json({ error: 'Both subject and predicate are required' })
         }
 
-        const fact = await get_current_fact(subject, predicate)
+        const fact = await get_current_fact(namespace, subject, predicate)
 
         if (!fact) {
-            return res.status(404).json({ error: 'No current fact found', subject, predicate })
+            return res.status(404).json({ error: 'No current fact found', namespace, subject, predicate })
         }
 
         res.json({ fact })
@@ -80,15 +94,20 @@ export const get_current_temporal_fact = async (req: any, res: any) => {
 
 export const get_entity_timeline = async (req: any, res: any) => {
     try {
-        const { subject, predicate } = req.query
+        const { namespace, subject, predicate } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!subject) {
             return res.status(400).json({ error: 'Subject parameter is required' })
         }
 
-        const timeline = await get_subject_timeline(subject, predicate)
+        const timeline = await get_subject_timeline(namespace, subject, predicate)
 
         res.json({
+            namespace,
             subject,
             predicate,
             timeline,
@@ -103,7 +122,11 @@ export const get_entity_timeline = async (req: any, res: any) => {
 
 export const get_predicate_history = async (req: any, res: any) => {
     try {
-        const { predicate, from, to } = req.query
+        const { namespace, predicate, from, to } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!predicate) {
             return res.status(400).json({ error: 'Predicate parameter is required' })
@@ -112,9 +135,10 @@ export const get_predicate_history = async (req: any, res: any) => {
         const from_date = from ? new Date(from) : undefined
         const to_date = to ? new Date(to) : undefined
 
-        const timeline = await get_predicate_timeline(predicate, from_date, to_date)
+        const timeline = await get_predicate_timeline(namespace, predicate, from_date, to_date)
 
         res.json({
+            namespace,
             predicate,
             from: from_date?.toISOString(),
             to: to_date?.toISOString(),
@@ -177,7 +201,11 @@ export const invalidate_temporal_fact = async (req: any, res: any) => {
 export const get_subject_facts = async (req: any, res: any) => {
     try {
         const { subject } = req.params
-        const { at, include_historical } = req.query
+        const { namespace, at, include_historical } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!subject) {
             return res.status(400).json({ error: 'Subject parameter is required' })
@@ -186,9 +214,10 @@ export const get_subject_facts = async (req: any, res: any) => {
         const at_date = at ? new Date(at) : undefined
         const include_hist = include_historical === 'true'
 
-        const facts = await get_facts_by_subject(subject, at_date, include_hist)
+        const facts = await get_facts_by_subject(namespace, subject, at_date, include_hist)
 
         res.json({
+            namespace,
             subject,
             at: at_date?.toISOString(),
             include_historical: include_hist,
@@ -204,7 +233,11 @@ export const get_subject_facts = async (req: any, res: any) => {
 
 export const search_temporal_facts = async (req: any, res: any) => {
     try {
-        const { pattern, field = 'subject', at } = req.query
+        const { namespace, pattern, field = 'subject', at } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!pattern) {
             return res.status(400).json({ error: 'Pattern parameter is required' })
@@ -215,9 +248,10 @@ export const search_temporal_facts = async (req: any, res: any) => {
         }
 
         const at_date = at ? new Date(at) : undefined
-        const facts = await search_facts(pattern, field as any, at_date)
+        const facts = await search_facts(namespace, pattern, field as any, at_date)
 
         res.json({
+            namespace,
             pattern,
             field,
             at: at_date?.toISOString(),
@@ -233,11 +267,18 @@ export const search_temporal_facts = async (req: any, res: any) => {
 
 export const get_temporal_stats = async (req: any, res: any) => {
     try {
-        const active_facts = await get_active_facts_count()
-        const total_facts = await get_total_facts_count()
+        const { namespace } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
+
+        const active_facts = await get_active_facts_count(namespace)
+        const total_facts = await get_total_facts_count(namespace)
         const historical_facts = total_facts - active_facts
 
         res.json({
+            namespace,
             active_facts,
             historical_facts,
             total_facts,
@@ -252,11 +293,16 @@ export const get_temporal_stats = async (req: any, res: any) => {
 
 export const apply_decay = async (req: any, res: any) => {
     try {
-        const { decay_rate = 0.01 } = req.body
+        const { namespace, decay_rate = 0.01 } = req.body
 
-        const updated = await apply_confidence_decay(decay_rate)
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
+
+        const updated = await apply_confidence_decay(namespace, decay_rate)
 
         res.json({
+            namespace,
             decay_rate,
             facts_updated: updated,
             message: 'Confidence decay applied successfully'
@@ -270,7 +316,11 @@ export const apply_decay = async (req: any, res: any) => {
 
 export const compare_facts = async (req: any, res: any) => {
     try {
-        const { subject, time1, time2 } = req.query
+        const { namespace, subject, time1, time2 } = req.query
+
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
 
         if (!subject || !time1 || !time2) {
             return res.status(400).json({ error: 'subject, time1, and time2 parameters are required' })
@@ -279,9 +329,10 @@ export const compare_facts = async (req: any, res: any) => {
         const t1 = new Date(time1)
         const t2 = new Date(time2)
 
-        const comparison = await compare_time_points(subject, t1, t2)
+        const comparison = await compare_time_points(namespace, subject, t1, t2)
 
         res.json({
+            namespace,
             subject,
             time1: t1.toISOString(),
             time2: t2.toISOString(),
@@ -302,11 +353,16 @@ export const compare_facts = async (req: any, res: any) => {
 
 export const get_most_volatile = async (req: any, res: any) => {
     try {
-        const { subject, limit = 10 } = req.query
+        const { namespace, subject, limit = 10 } = req.query
 
-        const volatile = await get_volatile_facts(subject, parseInt(limit))
+        if (!namespace) {
+            return res.status(400).json({ error: 'Namespace parameter is required' })
+        }
+
+        const volatile = await get_volatile_facts(namespace, subject, parseInt(limit))
 
         res.json({
+            namespace,
             subject,
             limit: parseInt(limit),
             volatile_facts: volatile,

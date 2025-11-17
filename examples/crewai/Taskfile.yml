@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+silent: true
+env:
+  PROJECT:
+    sh: 'echo "$(basename $(pwd))"'
+  LOCAL_BIN_PATH:
+    sh: 'echo "{{.ROOT_DIR}}/.venv/bin"'
+  BUILD_DATE:
+    sh: "date '+%Y-%m-%d-%H:%M:%S'"
+  BUILD_DATE_SHORT:
+    sh: "date '+%Y-%m-%d-%H%M%S'"
+  GIT_LATEST_TAG:
+    sh: 'git tag -l 2>/dev/null | sort -r -V | head -n 1 2>/dev/null || echo "not a git repo"'
+  TERM: screen-256color
+  DOCS_PATH: "{{.ROOT_DIR}}/docs"
+  PYTHON_VENV_PATH: "{{.ROOT_DIR}}/.venv"
+  SCRIPT_PATH: "{{.ROOT_DIR}}/scripts"
+  VERSION: '{{default "unknown" .GIT_LATEST_TAG}}'
+  COMPOSE_BAKE: true
+
+dotenv:
+  - ".env"
+
+tasks:
+  default:
+    cmds:
+      - |
+        task -l
+
+  show:
+    desc: Show task variables
+    cmds:
+      - |
+        echo "ROOT_PATH: {{.ROOT_DIR}}"
+        echo "PROJECT: {{.PROJECT}}"
+        echo "VERSION: {{.VERSION}}"
+        echo "OS: {{OS}}"
+        echo "ARCH: {{ARCH}}"
+        echo "LOCAL_BIN_PATH: {{.LOCAL_BIN_PATH}}"
+        echo "PYTHON_VENV_PATH: {{.PYTHON_VENV_PATH}}"
+        echo "SCRIPT_PATH: {{.SCRIPT_PATH}}"
+        echo "BUILD_DATE: {{.BUILD_DATE}}"
+        echo "GIT_LATEST_TAG: {{.GIT_LATEST_TAG}}"
+
+  install:
+    desc: Set up the Python virtual environment and install dependencies
+    cmds:
+      - |
+        uv sync
+        uv pip install -e ".[ollama]"
+
+  run:
+    desc: Run the app
+    cmds:
+      - |
+        uv run launch_flow.py run improve-project-flow.yml -I project_path=. --verbose
+
+  lint:
+    desc: Run python linting
+    dir: api
+    cmds:
+      - |
+        uv pip install -e ".[dev]"
+        uv run ruff check .
+        uv run black --check .
+
+  lint:fix:
+    desc: Run python linting and fix issues
+    dir: api
+    cmds:
+      - |
+        uv run ruff check --fix .
+
+  format:
+    desc: Run python formatting
+    dir: api
+    cmds:
+      - |
+        uv run ruff format .
+        uv run black .
+  

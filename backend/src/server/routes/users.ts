@@ -4,6 +4,7 @@ import {
     update_user_summary,
     auto_update_user_summaries,
 } from "../../memory/user_summary";
+import { VectorRepositoryFactory } from "../../repositories/VectorRepositoryFactory";
 
 export const usr = (app: any) => {
     app.get("/users/:user_id/summary", async (req: any, res: any) => {
@@ -96,9 +97,12 @@ export const usr = (app: any) => {
             const mems = await q.all_mem_by_user.all(user_id, 10000, 0);
             let deleted = 0;
 
+            const vectorRepo = await VectorRepositoryFactory.getInstance();
+            
             for (const m of mems) {
                 await q.del_mem.run(m.id);
-                await q.del_vec.run(m.id);
+                // Use vector repository for namespace-isolated deletion
+                await vectorRepo.delete(m.id, undefined, user_id);
                 await q.del_waypoints.run(m.id, m.id);
                 deleted++;
             }

@@ -284,4 +284,19 @@ tasks:
     cmds:
       - |
         git fetch upstream
-        git merge upstream/main
+        git merge upstream/
+
+  run:dashboard:
+    desc: Run the dashboard
+    dir: ./dashboard
+    cmds:
+      - |
+        npm install
+      - npm run dev
+
+  up:
+    desc: Start the full development environment with Docker Compose
+    cmds:
+      - |
+        docker-compose -f docker-compose.dev.yml up -d --build
+        python3 backend/scripts/bootstrap-demo-data.py

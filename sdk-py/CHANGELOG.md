@@ -1,6 +1,44 @@
-# OpenMemory Python SDK v0.4.0 - Agent Registration & Namespacing
+# OpenMemory Python SDK Changelog
 
-## 🎉 Major Update: Agent Registration and Namespace Management
+## v0.5.0 - Namespace Isolation Update (November 2025)
+
+### ⚠️ BREAKING CHANGES
+
+**Removed Shared Namespaces Feature**
+
+For enhanced security and true data isolation, the `shared_namespaces` feature has been removed:
+
+- ❌ **Removed**: `shared_namespaces` parameter from `OpenMemoryAgent`
+- ❌ **Removed**: `shared_namespaces` from `register_agent()`
+- ❌ **Removed**: Ability to access multiple namespaces per agent
+- ✅ **Enhanced**: Each agent now has a single, completely isolated namespace
+- ✅ **Security**: True data separation at the storage layer (separate Qdrant collections)
+
+**Migration:**
+```python
+# OLD (v0.4.0)
+agent = OpenMemoryAgent(
+    agent_id="my-agent",
+    namespace="primary",
+    shared_namespaces=["shared-1", "shared-2"]  # ❌ No longer supported
+)
+
+# NEW (v0.5.0+)
+agent = OpenMemoryAgent(
+    agent_id="my-agent",
+    namespace="primary"  # ✅ Single isolated namespace
+)
+```
+
+For collaboration scenarios, create separate agents with their own namespaces or implement application-level sharing mechanisms.
+
+---
+
+## v0.4.0 - Agent Registration & Namespacing (Historical)
+
+> **Note**: This version introduced shared_namespaces, which was later removed in v0.5.0 for enhanced security.
+
+### 🎉 Major Update: Agent Registration and Namespace Management
 
 This release introduces powerful agent registration and namespace management capabilities to the OpenMemory Python SDK, enabling secure multi-agent collaboration and memory isolation.
 

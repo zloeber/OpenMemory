@@ -1,0 +1,36 @@
+version: "1.0"
+
+description: Simple test flow with minimal configuration
+
+inputs:
+  - name: test_input
+    description: "A test input"
+    type: string
+    default: "test value"
+
+agents:
+  test_agent:
+    role: "Test Agent"
+    goal: "Perform a simple test task"
+    instructions: "You are a test agent. Just say hello and complete the task."
+    tasks:
+      - name: say_hello
+        description: "Say hello"
+
+crew:
+  name: "Simple Test Crew"
+  description: "A minimal crew for testing"
+  agents:
+    - test_agent
+
+workflow:
+  - agent: test_agent
+    task: say_hello
+
+llms:
+  - name: ollama
+    provider: "ollama"
+    base_url: "http://linbox5:11434"
+    model: "gpt-oss:latest"
+    temperature: 0.2
+    max_tokens: 1000

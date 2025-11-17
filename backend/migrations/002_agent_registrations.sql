@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS agent_registrations (
 -- Namespace groups table for managing shared spaces
 CREATE TABLE IF NOT EXISTS namespace_groups (
     namespace TEXT PRIMARY KEY,
-    group_type TEXT NOT NULL DEFAULT 'private', -- 'private', 'shared', 'public'
     description TEXT,
     created_by TEXT, -- agent_id that created this namespace
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -41,12 +40,13 @@ CREATE TABLE IF NOT EXISTS agent_access_log (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_agent_registrations_namespace ON agent_registrations(namespace);
 CREATE INDEX IF NOT EXISTS idx_agent_registrations_active ON agent_registrations(active);
-CREATE INDEX IF NOT EXISTS idx_namespace_groups_type ON namespace_groups(group_type);
+CREATE INDEX IF NOT EXISTS idx_namespace_groups_created_at ON namespace_groups(created_at);
+CREATE INDEX IF NOT EXISTS idx_namespace_groups_active ON namespace_groups(active);
 CREATE INDEX IF NOT EXISTS idx_agent_access_log_agent_id ON agent_access_log(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_access_log_timestamp ON agent_access_log(timestamp);
 
 -- Insert default shared namespaces
-INSERT OR IGNORE INTO namespace_groups (namespace, group_type, description, created_by) VALUES 
-('public-knowledge', 'public', 'Publicly accessible knowledge base', NULL),
-('team-shared', 'shared', 'Shared team collaboration space', NULL),
-('company-policies', 'shared', 'Company policies and documentation', NULL);
+INSERT OR IGNORE INTO namespace_groups (namespace, description, created_by) VALUES 
+('public-knowledge', 'Publicly accessible knowledge base', NULL),
+('team-shared', 'Shared team collaboration space', NULL),
+('company-policies', 'Company policies and documentation', NULL);

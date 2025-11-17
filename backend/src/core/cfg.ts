@@ -94,4 +94,9 @@ export const env = {
     summary_layers: num(process.env.OM_SUMMARY_LAYERS, 3),
     keyword_boost: num(process.env.OM_KEYWORD_BOOST, 2.5),
     keyword_min_length: num(process.env.OM_KEYWORD_MIN_LENGTH, 3),
+    proxy_only_mode: bool(process.env.OM_PROXY_ONLY_MODE),
+    // Qdrant Configuration
+    qdrant_url: str(process.env.OM_QDRANT_URL, "http://localhost:6333"),
+    qdrant_api_key: process.env.OM_QDRANT_API_KEY,
+    qdrant_collection: str(process.env.OM_QDRANT_COLLECTION, "openmemory_vectors"),
 };

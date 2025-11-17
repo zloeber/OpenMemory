@@ -1,0 +1,38 @@
+version: "1.0"
+
+description: Test flow with only the first agent
+
+inputs:
+  - name: project_path
+    description: "The root path of the project"
+    type: string
+    default: "."
+
+agents:
+  lead_agent:
+    role: "Lead Project Strategist"
+    goal: "Identify improvement areas"
+    instructions: "Simple instructions for testing"
+    tasks:
+      - name: evaluate_project
+        description: "Evaluate the project at {project_path}"
+        outputs:
+          - selected_improvement
+
+crew:
+  name: "Test Crew"
+  description: "Testing crew"
+  agents:
+    - lead_agent
+
+workflow:
+  - agent: lead_agent
+    task: evaluate_project
+
+llms:
+  - name: ollama
+    provider: "ollama"
+    base_url: "http://linbox5:11434"
+    model: "gpt-oss:latest"
+    temperature: 0.2
+    max_tokens: 1000

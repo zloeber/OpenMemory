@@ -3,6 +3,48 @@ import { create_proxy_srv } from "../ai/mcp-proxy";
 import { env } from "../core/cfg";
 import { q } from "../core/db";
 
+/**
+ * Middleware to enforce proxy-only mode
+ * Blocks requests to non-proxy endpoints when OM_PROXY_ONLY_MODE is enabled
+ */
+export const proxy_only_mode_middleware = (req: any, res: any, next: any) => {
+    if (!env.proxy_only_mode) {
+        return next();
+    }
+    
+    const path = req.path || req.url;
+    
+    // Allow proxy endpoints, Swagger, dashboard, and system endpoints
+    const allowedPaths = [
+        '/mcp-proxy',
+        '/api/agents',
+        '/api/namespaces',
+        '/api/proxy-info',
+        '/api/registration-template',
+        '/api/proxy-health',
+        '/api-docs',
+        '/swagger',
+        '/health',
+        '/sectors',
+        '/dashboard',
+        '/'
+    ];
+    
+    // Check if path starts with any allowed path
+    const isAllowed = allowedPaths.some(allowed => path.startsWith(allowed));
+    
+    if (isAllowed) {
+        return next();
+    }
+    
+    // Block all other routes in proxy-only mode
+    res.status(403).json({
+        error: "Forbidden",
+        message: "This endpoint is not available in proxy-only mode. Only MCP proxy, agent management, and monitoring endpoints are accessible.",
+        available_endpoints: allowedPaths
+    });
+};
+
 // Global proxy instance
 let proxyInstance: ReturnType<typeof create_proxy_srv> | null = null;
 
@@ -112,7 +154,7 @@ export const proxy_routes = (app: any) => {
 
     app.post("/api/agents", async (req: any, res: any) => {
         try {
-            const { agent_id, namespace, permissions = ['read', 'write'], shared_namespaces = [], description = '' } = req.body;
+            const { agent_id, namespace, permissions = ['read', 'write'], description = '' } = req.body;
 
             // Validate required fields
             if (!agent_id || !namespace) {
@@ -134,33 +176,29 @@ export const proxy_routes = (app: any) => {
             const existingAgent = await q.get_agent.get(agent_id);
             const now = Math.floor(Date.now() / 1000);
             
-            let api_key: string;
             let operation: string;
             let message: string;
 
             if (existingAgent) {
                 // Update existing agent (idempotent operation)
-                api_key = existingAgent.api_key; // Keep existing API key
                 operation = 'update';
                 message = `Agent '${agent_id}' updated successfully`;
 
                 // Database query parameter order differs between PostgreSQL and SQLite
                 if (env.metadata_backend === 'postgres') {
-                    // PostgreSQL: agent_id, namespace, permissions, shared_namespaces, description, last_access
+                    // PostgreSQL: agent_id, namespace, permissions, description, last_access
                     await q.upd_agent.run(
                         agent_id,
                         namespace,
                         JSON.stringify(permissions),
-                        JSON.stringify(shared_namespaces),
                         description,
                         now
                     );
                 } else {
-                    // SQLite: namespace, permissions, shared_namespaces, description, last_access, agent_id
+                    // SQLite: namespace, permissions, description, last_access, agent_id
                     await q.upd_agent.run(
                         namespace,
                         JSON.stringify(permissions),
-                        JSON.stringify(shared_namespaces),
                         description,
                         now,
                         agent_id
@@ -168,8 +206,6 @@ export const proxy_routes = (app: any) => {
                 }
             } else {
                 // Create new agent
-                const generateApiKey = () => 'omp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-                api_key = generateApiKey();
                 operation = 'register';
                 message = `Agent '${agent_id}' registered successfully`;
 
@@ -177,8 +213,6 @@ export const proxy_routes = (app: any) => {
                     agent_id,
                     namespace,
                     JSON.stringify(permissions),
-                    JSON.stringify(shared_namespaces),
-                    api_key,
                     description,
                     now,  // registration_date
                     now,  // last_access
@@ -196,13 +230,16 @@ export const proxy_routes = (app: any) => {
                 null  // error_message
             );
 
+            const proxy = getProxy();
+            if (proxy?.refreshCache) {
+                await proxy.refreshCache();
+            }
+
             res.json({
                 success: true,
                 agent_id: agent_id,
-                api_key: api_key,
                 namespace: namespace,
                 permissions: permissions,
-                shared_namespaces: shared_namespaces,
                 description: description,
                 message: message
             });
@@ -216,13 +253,59 @@ export const proxy_routes = (app: any) => {
         }
     });
 
+    app.delete("/api/agents/:agent_id", async (req: any, res: any) => {
+        const { agent_id } = req.params;
+
+        if (!agent_id) {
+            return res.status(400).json({ error: "Agent ID is required" });
+        }
+
+        try {
+            const agent = await q.get_agent.get(agent_id);
+            if (!agent) {
+                return res.status(404).json({ error: "Agent not found" });
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+
+            await q.clear_namespace_creator.run(agent_id);
+            await q.deactivate_agent.run(agent_id, now);
+
+            await q.ins_access_log.run(
+                agent_id,
+                "deactivate",
+                agent.namespace,
+                now,
+                1,
+                null,
+            );
+
+            const proxy = getProxy();
+            if (proxy?.refreshCache) {
+                await proxy.refreshCache();
+            }
+
+            res.json({
+                success: true,
+                agent_id,
+                namespace: agent.namespace,
+                message: `Agent '${agent_id}' deactivated`,
+            });
+        } catch (error) {
+            console.error('[AGENT DEACTIVATE] Error:', error);
+            res.status(500).json({
+                error: "Failed to deactivate agent",
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    });
+
     app.get("/api/namespaces", async (req: any, res: any) => {
         try {
             const namespaces = await q.all_namespaces.all();
             res.json({ 
                 namespaces: namespaces.map(ns => ({
                     namespace: ns.namespace,
-                    group_type: ns.group_type,
                     description: ns.description,
                     created_by: ns.created_by,
                     created_at: new Date(ns.created_at * 1000).toISOString(),
@@ -234,6 +317,162 @@ export const proxy_routes = (app: any) => {
             res.status(500).json({ 
                 error: "Failed to list namespaces", 
                 message: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+    app.get("/api/namespaces/summary", async (_req: any, res: any) => {
+        try {
+            const [namespaces, agents] = await Promise.all([
+                q.all_namespaces.all(),
+                q.all_agents.all(),
+            ]);
+
+            const primaryCounts = new Map<string, number>();
+            const allNamespaceNames = new Set<string>();
+
+            // Track all namespaces from the namespace_groups table
+            for (const ns of namespaces) {
+                allNamespaceNames.add(ns.namespace);
+            }
+
+            // Process agents and track all referenced namespaces
+            for (const agent of agents) {
+                const primaryNs = agent.namespace;
+                allNamespaceNames.add(primaryNs);
+                primaryCounts.set(primaryNs, (primaryCounts.get(primaryNs) || 0) + 1);
+            }
+
+            // Create namespace lookup from database entries
+            const namespaceMap = new Map(namespaces.map(ns => [ns.namespace, ns]));
+
+            // Build summary for all namespaces (from DB and from agent references)
+            const summary = Array.from(allNamespaceNames).map(namespaceName => {
+                const ns = namespaceMap.get(namespaceName);
+                const createdAtSeconds = ns ? Number(ns.created_at ?? 0) : Math.floor(Date.now() / 1000);
+                const updatedAtSeconds = ns ? Number(ns.updated_at ?? createdAtSeconds) : createdAtSeconds;
+                
+                return {
+                    namespace: namespaceName,
+                    description: ns?.description || null,
+                    created_by: ns?.created_by || null,
+                    created_at: new Date(createdAtSeconds * 1000).toISOString(),
+                    updated_at: new Date(updatedAtSeconds * 1000).toISOString(),
+                    primary_agent_count: primaryCounts.get(namespaceName) || 0,
+                    active: ns?.active !== undefined ? ns.active === 1 || ns.active === true : true,
+                };
+            });
+
+            res.json({
+                namespaces: summary,
+                totals: {
+                    totalNamespaces: summary.length,
+                    totalAgents: agents.length,
+                    orphanedNamespaces: summary.filter((ns) => ns.primary_agent_count === 0).length,
+                },
+            });
+        } catch (error) {
+            res.status(500).json({
+                error: "Failed to summarize namespaces",
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    });
+
+    app.post("/api/namespaces", async (req: any, res: any) => {
+        const { namespace, description = "", created_by } = req.body || {};
+
+        if (!namespace) {
+            return res.status(400).json({ error: "namespace is required" });
+        }
+
+        if (!/^[a-zA-Z0-9_-]+$/.test(namespace)) {
+            return res.status(400).json({
+                error: "Invalid namespace",
+                message: "namespace must contain only alphanumeric characters, hyphens, and underscores",
+            });
+        }
+
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            const existing = await q.get_namespace.get(namespace);
+            const createdAt = existing ? Number(existing.created_at ?? now) : now;
+            const creator = typeof created_by === "string" && created_by.trim().length > 0
+                ? created_by.trim()
+                : existing?.created_by ?? null;
+
+            await q.ins_namespace.run(
+                namespace,
+                description,
+                creator,
+                createdAt,
+                now,
+                1,
+            );
+
+            const proxy = getProxy();
+            if (proxy?.refreshCache) {
+                await proxy.refreshCache();
+            }
+
+            res.json({
+                success: true,
+                namespace,
+                description,
+                created_by: creator,
+                created_at: new Date(createdAt * 1000).toISOString(),
+                updated_at: new Date(now * 1000).toISOString(),
+                message: existing ? `Namespace '${namespace}' updated` : `Namespace '${namespace}' created`,
+            });
+        } catch (error) {
+            console.error('[NAMESPACE UPSERT] Error:', error);
+            res.status(500).json({
+                error: "Failed to upsert namespace",
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    });
+
+    app.delete("/api/namespaces/:namespace", async (req: any, res: any) => {
+        const { namespace } = req.params;
+
+        if (!namespace) {
+            return res.status(400).json({ error: "namespace is required" });
+        }
+
+        try {
+            const existing = await q.get_namespace.get(namespace);
+            if (!existing) {
+                return res.status(404).json({ error: "Namespace not found" });
+            }
+
+            const agents = await q.all_agents.all();
+            const activeAgents = agents.filter((agent: any) => agent.namespace === namespace);
+            if (activeAgents.length > 0) {
+                return res.status(400).json({
+                    error: "Namespace in use",
+                    message: "Reassign or deactivate agents that rely on this namespace before disabling it",
+                });
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+            await q.deactivate_namespace.run(namespace, now);
+
+            const proxy = getProxy();
+            if (proxy?.refreshCache) {
+                await proxy.refreshCache();
+            }
+
+            res.json({
+                success: true,
+                namespace,
+                message: `Namespace '${namespace}' deactivated`,
+            });
+        } catch (error) {
+            console.error('[NAMESPACE DEACTIVATE] Error:', error);
+            res.status(500).json({
+                error: "Failed to deactivate namespace",
+                message: error instanceof Error ? error.message : String(error),
             });
         }
     });

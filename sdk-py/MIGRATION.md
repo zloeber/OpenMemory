@@ -1,6 +1,40 @@
 # OpenMemory Python SDK Migration Guide
 
-## Upgrading to v0.4.0 with Agent Support
+## ⚠️ Latest Update: v0.5.0 - Shared Namespaces Removed
+
+**Important**: The `shared_namespaces` feature introduced in v0.4.0 has been removed in v0.5.0 for enhanced security and true data isolation.
+
+### Quick Migration to v0.5.0
+
+```python
+# OLD (v0.4.0) - No longer supported
+agent = OpenMemoryAgent(
+    agent_id="my-agent",
+    namespace="primary-ns",
+    shared_namespaces=["shared-1", "shared-2"]  # ❌ Removed
+)
+
+# NEW (v0.5.0+) - Single namespace only
+agent = OpenMemoryAgent(
+    agent_id="my-agent",
+    namespace="primary-ns"  # ✅ Isolated namespace
+)
+```
+
+**Why this change?**
+- 🔒 **True Security**: Each namespace gets its own Qdrant collection
+- 🚀 **Better Performance**: Smaller search spaces, optimized indices
+- 🛠️ **Easier Maintenance**: Clear data boundaries, simpler backups
+
+For collaboration, create separate agents or implement application-level sharing.
+
+See the main [README](README.md) for updated examples.
+
+---
+
+## Upgrading to v0.4.0 with Agent Support (Historical)
+
+> **Note**: This section describes the v0.4.0 update which introduced shared_namespaces. This feature was later removed in v0.5.0.
 
 This guide helps you migrate from the basic OpenMemory Python SDK to the new version with agent registration and namespace management.
 

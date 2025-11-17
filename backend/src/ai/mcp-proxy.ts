@@ -11,13 +11,14 @@ import {
 } from "../memory/hsg";
 import { q, get_async } from "../core/db";
 import type { sector_type } from "../core/types";
+import { insert_fact, update_fact, invalidate_fact } from "../temporal_graph/store";
+import { query_facts_at_time, get_current_fact, search_facts, get_facts_by_subject } from "../temporal_graph/query";
+import { get_subject_timeline, compare_time_points } from "../temporal_graph/timeline";
 
 interface AgentRegistration {
     agent_id: string;
     namespace: string;
     permissions: ('read' | 'write' | 'admin')[];
-    shared_namespaces: string[];
-    api_key: string;
     description?: string;
     registration_date: number;
     last_access: number;
@@ -25,7 +26,6 @@ interface AgentRegistration {
 
 interface NamespaceGroup {
     namespace: string;
-    group_type: 'private' | 'shared' | 'public';
     description?: string;
     created_by?: string;
     created_at: number;
@@ -100,12 +100,10 @@ export class OpenMemoryMCPProxy {
                 namespace: z.string().min(1).describe("Primary namespace for agent memories"),
                 permissions: z.array(z.enum(["read", "write", "admin"])).default(["read", "write"])
                     .describe("Permissions for the primary namespace"),
-                shared_namespaces: z.array(z.string()).optional()
-                    .describe("Additional namespaces this agent can access"),
                 description: z.string().optional().describe("Agent description for documentation")
             },
             async (params: any) => {
-                const { agent_id, namespace, permissions, shared_namespaces, description } = params;
+                const { agent_id, namespace, permissions, description } = params;
                 
                 if (this.agents.has(agent_id)) {
                     throw new Error(`Agent ${agent_id} is already registered`);
@@ -115,8 +113,6 @@ export class OpenMemoryMCPProxy {
                     agent_id,
                     namespace,
                     permissions,
-                    shared_namespaces: shared_namespaces || [],
-                    api_key: this.generateApiKey(),
                     description,
                     registration_date: Date.now(),
                     last_access: Date.now()
@@ -128,8 +124,6 @@ export class OpenMemoryMCPProxy {
                     agent_id,
                     namespace,
                     JSON.stringify(permissions),
-                    JSON.stringify(shared_namespaces || []),
-                    registration.api_key,
                     description,
                     now,
                     now,
@@ -143,7 +137,6 @@ export class OpenMemoryMCPProxy {
                 if (!this.namespaces.has(namespace)) {
                     const namespaceGroup: NamespaceGroup = {
                         namespace,
-                        group_type: 'private',
                         description: `Private namespace for agent ${agent_id}`,
                         created_by: agent_id,
                         created_at: Date.now()
@@ -151,7 +144,6 @@ export class OpenMemoryMCPProxy {
 
                     await q.ins_namespace.run(
                         namespace,
-                        'private',
                         namespaceGroup.description,
                         agent_id,
                         now,
@@ -177,11 +169,10 @@ export class OpenMemoryMCPProxy {
         this.srv.tool("list_agents",
             "List all registered agents and their namespaces",
             {
-                show_api_keys: z.boolean().default(false).describe("Whether to include API keys in output"),
                 agent_id: z.string().optional().describe("Filter to specific agent")
             },
             async (params: any) => {
-                const { show_api_keys, agent_id } = params;
+                const { agent_id } = params;
                 
                 let agentsToShow = Array.from(this.agents.values());
                 
@@ -193,11 +184,9 @@ export class OpenMemoryMCPProxy {
                     agent_id: agent.agent_id,
                     namespace: agent.namespace,
                     permissions: agent.permissions,
-                    shared_namespaces: agent.shared_namespaces,
                     description: agent.description,
                     registration_date: new Date(agent.registration_date).toISOString(),
-                    last_access: new Date(agent.last_access).toISOString(),
-                    ...(show_api_keys && { api_key: agent.api_key })
+                    last_access: new Date(agent.last_access).toISOString()
                 }));
 
                 return { 
@@ -214,27 +203,24 @@ export class OpenMemoryMCPProxy {
             "Get detailed information about a specific agent",
             {
                 agent_id: z.string().min(1).describe("Agent ID to retrieve"),
-                include_api_key: z.boolean().default(false).describe("Whether to include the API key in response"),
                 include_access_log: z.boolean().default(false).describe("Whether to include recent access log entries")
             },
             async (params: any) => {
-                const { agent_id, include_api_key, include_access_log } = params;
+                const { agent_id, include_access_log } = params;
                 
                 const agent = this.agents.get(agent_id);
                 if (!agent) {
                     throw new Error(`Agent '${agent_id}' not found`);
                 }
 
-                const agentDetails = {
+                const agentDetails: any = {
                     agent_id: agent.agent_id,
                     namespace: agent.namespace,
                     permissions: agent.permissions,
-                    shared_namespaces: agent.shared_namespaces,
                     description: agent.description,
                     registration_date: new Date(agent.registration_date).toISOString(),
                     last_access: new Date(agent.last_access).toISOString(),
-                    status: "active",
-                    ...(include_api_key && { api_key: agent.api_key })
+                    status: "active"
                 };
 
                 // Add access log if requested
@@ -267,33 +253,62 @@ export class OpenMemoryMCPProxy {
         this.srv.tool("query_memory",
             "Query memories from agent's authorized namespaces",
             {
-                agent_id: z.string().describe("Requesting agent ID"),
                 query: z.string().min(1).describe("Search query"),
-                namespace: z.string().optional().describe("Target namespace (defaults to agent's primary)"),
+                namespace: z.string().describe("Target namespace (required)"),
+                agent_id: z.string().optional().describe("Requesting agent ID (optional, for logging)"),
                 k: z.number().int().min(1).max(32).default(8).describe("Number of results to return"),
                 sector: sec_enum.optional().describe("Restrict search to a specific sector"),
-                min_salience: z.number().min(0).max(1).optional().describe("Minimum salience threshold"),
-                api_key: z.string().optional().describe("Agent's API key for authentication")
+                min_salience: z.number().min(0).max(1).optional().describe("Minimum salience threshold")
             },
             async (params: any) => {
-                const { agent_id, query, namespace, k, sector, min_salience, api_key } = params;
+                const { agent_id, query, namespace, k, sector, min_salience } = params;
                 
-                const agent = this.validateAgent(agent_id, api_key);
-                const target_ns = namespace || agent.namespace;
-                this.validateNamespaceAccess(agent, target_ns, 'read');
+                if (!namespace) {
+                    throw new Error("namespace is required for all memory operations");
+                }
                 
-                agent.last_access = Date.now();
-                await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                const target_ns = namespace;
                 
-                // Log the access
-                await q.ins_access_log.run(
-                    agent_id,
-                    'query',
-                    target_ns,
-                    Math.floor(Date.now() / 1000),
-                    1, // success
-                    null // no error
-                );
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        // Log the access
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'query',
+                            target_ns,
+                            Math.floor(Date.now() / 1000),
+                            1, // success
+                            null // no error
+                        );
+                    }
+                }
+                
+                // Auto-create namespace if it doesn't exist
+                if (!this.namespaces.has(target_ns)) {
+                    const now = Math.floor(Date.now() / 1000);
+                    const namespaceGroup: NamespaceGroup = {
+                        namespace: target_ns,
+                        description: `Auto-created namespace: ${target_ns}`,
+                        created_by: agent_id,
+                        created_at: Date.now()
+                    };
+
+                    await q.ins_namespace.run(
+                        target_ns,
+                        namespaceGroup.description,
+                        agent_id || null,
+                        now,
+                        now,
+                        1 // active
+                    );
+
+                    this.namespaces.set(target_ns, namespaceGroup);
+                }
 
                 // Build filters with namespace as user_id
                 const filters = {
@@ -335,33 +350,62 @@ export class OpenMemoryMCPProxy {
         this.srv.tool("store_memory",
             "Store a memory in agent's namespace",
             {
-                agent_id: z.string().describe("Agent ID"),
                 content: z.string().min(1).describe("Memory content to store"),
-                namespace: z.string().optional().describe("Target namespace (defaults to agent's primary)"),
+                namespace: z.string().describe("Target namespace (required)"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)"),
                 sector: sec_enum.optional().describe("Memory sector classification"),
                 salience: z.number().min(0).max(1).optional().describe("Memory importance (0-1)"),
-                metadata: z.record(z.any()).optional().describe("Additional metadata"),
-                api_key: z.string().optional().describe("Agent's API key")
+                metadata: z.record(z.any()).optional().describe("Additional metadata")
             },
             async (params: any) => {
-                const { agent_id, content, namespace, sector, salience, metadata, api_key } = params;
+                const { agent_id, content, namespace, sector, salience, metadata } = params;
                 
-                const agent = this.validateAgent(agent_id, api_key);
-                const target_ns = namespace || agent.namespace;
-                this.validateNamespaceAccess(agent, target_ns, 'write');
+                if (!namespace) {
+                    throw new Error("namespace is required for all memory operations");
+                }
                 
-                agent.last_access = Date.now();
-                await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                const target_ns = namespace;
                 
-                // Log the access
-                await q.ins_access_log.run(
-                    agent_id,
-                    'store',
-                    target_ns,
-                    Math.floor(Date.now() / 1000),
-                    1, // success
-                    null // no error
-                );
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        // Log the access
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'store',
+                            target_ns,
+                            Math.floor(Date.now() / 1000),
+                            1, // success
+                            null // no error
+                        );
+                    }
+                }
+                
+                // Auto-create namespace if it doesn't exist
+                if (!this.namespaces.has(target_ns)) {
+                    const now = Math.floor(Date.now() / 1000);
+                    const namespaceGroup: NamespaceGroup = {
+                        namespace: target_ns,
+                        description: `Auto-created namespace: ${target_ns}`,
+                        created_by: agent_id,
+                        created_at: Date.now()
+                    };
+
+                    await q.ins_namespace.run(
+                        target_ns,
+                        namespaceGroup.description,
+                        agent_id || null,
+                        now,
+                        now,
+                        1 // active
+                    );
+
+                    this.namespaces.set(target_ns, namespaceGroup);
+                }
 
                 // Store memory with namespace as user_id - fix the function signature
                 const memory_id = await add_hsg_memory(
@@ -388,35 +432,46 @@ export class OpenMemoryMCPProxy {
         this.srv.tool("reinforce_memory",
             "Reinforce the salience of a specific memory",
             {
-                agent_id: z.string().describe("Agent ID"),
                 memory_id: z.string().describe("ID of memory to reinforce"),
-                api_key: z.string().optional().describe("Agent's API key")
+                namespace: z.string().describe("Namespace containing the memory (required)"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
             },
             async (params: any) => {
-                const { agent_id, memory_id, api_key } = params;
+                const { agent_id, memory_id, namespace } = params;
                 
-                const agent = this.validateAgent(agent_id, api_key);
+                if (!namespace) {
+                    throw new Error("namespace is required for all memory operations");
+                }
                 
-                // Verify the memory belongs to an accessible namespace
+                // Verify the memory exists
                 const memory = await q.get_mem.get(memory_id);
                 if (!memory) {
                     throw new Error(`Memory ${memory_id} not found`);
                 }
                 
-                this.validateNamespaceAccess(agent, memory.user_id || agent.namespace, 'write');
+                // Verify the memory belongs to the specified namespace
+                if (memory.user_id !== namespace) {
+                    throw new Error(`Memory ${memory_id} does not belong to namespace '${namespace}'`);
+                }
                 
-                agent.last_access = Date.now();
-                await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
-                
-                // Log the access
-                await q.ins_access_log.run(
-                    agent_id,
-                    'reinforce',
-                    memory.user_id || agent.namespace,
-                    Math.floor(Date.now() / 1000),
-                    1, // success
-                    null // no error
-                );
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        // Log the access
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'reinforce',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1, // success
+                            null // no error
+                        );
+                    }
+                }
 
                 await reinforce_memory(memory_id);
 
@@ -428,6 +483,328 @@ export class OpenMemoryMCPProxy {
                 };
             }
         );
+
+        // Temporal fact operations
+        this.srv.tool("store_temporal_fact",
+            "Store a temporal fact in agent's namespace with time bounds",
+            {
+                namespace: z.string().describe("Target namespace (required)"),
+                subject: z.string().describe("Fact subject (e.g., 'OpenAI', 'user')"),
+                predicate: z.string().describe("Fact predicate (e.g., 'has_CEO', 'prefers')"),
+                object: z.string().describe("Fact object/value (e.g., 'Sam Altman', 'coffee')"),
+                valid_from: z.string().optional().describe("ISO date when fact becomes valid (default: now)"),
+                confidence: z.number().min(0).max(1).optional().describe("Confidence level (0-1, default: 1.0)"),
+                metadata: z.record(z.any()).optional().describe("Additional metadata"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
+            },
+            async (params: any) => {
+                const { namespace, subject, predicate, object, valid_from, confidence, metadata, agent_id } = params;
+                
+                if (!namespace) {
+                    throw new Error("namespace is required for temporal fact operations");
+                }
+                
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'store_temporal_fact',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1,
+                            null
+                        );
+                    }
+                }
+                
+                const valid_from_date = valid_from ? new Date(valid_from) : new Date();
+                const conf = confidence !== undefined ? confidence : 1.0;
+                
+                const fact_id = await insert_fact(namespace, subject, predicate, object, valid_from_date, conf, metadata);
+                
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Temporal fact stored: ${subject} ${predicate} ${object} (valid from ${valid_from_date.toISOString()}, confidence: ${conf}, id: ${fact_id})`
+                    }],
+                    meta: {
+                        fact_id,
+                        namespace,
+                        subject,
+                        predicate,
+                        object,
+                        valid_from: valid_from_date.toISOString(),
+                        confidence: conf
+                    }
+                };
+            }
+        );
+
+        this.srv.tool("query_temporal_facts",
+            "Query temporal facts from agent's namespace at a specific time",
+            {
+                namespace: z.string().describe("Target namespace (required)"),
+                subject: z.string().optional().describe("Filter by subject"),
+                predicate: z.string().optional().describe("Filter by predicate"),
+                object: z.string().optional().describe("Filter by object"),
+                at: z.string().optional().describe("ISO date to query (default: now)"),
+                min_confidence: z.number().min(0).max(1).optional().describe("Minimum confidence threshold"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
+            },
+            async (params: any) => {
+                const { namespace, subject, predicate, object, at, min_confidence, agent_id } = params;
+                
+                if (!namespace) {
+                    throw new Error("namespace is required for temporal fact operations");
+                }
+                
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'query_temporal_facts',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1,
+                            null
+                        );
+                    }
+                }
+                
+                const at_date = at ? new Date(at) : new Date();
+                const facts = await query_facts_at_time(namespace, subject, predicate, object, at_date, min_confidence || 0.1);
+                
+                const summary = facts.length > 0
+                    ? facts.map((f, idx) => 
+                        `${idx + 1}. ${f.subject} ${f.predicate} ${f.object} (confidence: ${f.confidence.toFixed(2)}, valid from: ${f.valid_from.toISOString()})`
+                      ).join('\n')
+                    : 'No temporal facts found matching the query';
+                
+                return {
+                    content: [{
+                        type: "text",
+                        text: summary
+                    }],
+                    meta: {
+                        namespace,
+                        query: { subject, predicate, object, at: at_date.toISOString() },
+                        count: facts.length,
+                        facts: facts.map(f => ({
+                            id: f.id,
+                            subject: f.subject,
+                            predicate: f.predicate,
+                            object: f.object,
+                            confidence: f.confidence,
+                            valid_from: f.valid_from.toISOString(),
+                            valid_to: f.valid_to?.toISOString()
+                        }))
+                    }
+                };
+            }
+        );
+
+        this.srv.tool("get_current_temporal_fact",
+            "Get the current value of a temporal fact",
+            {
+                namespace: z.string().describe("Target namespace (required)"),
+                subject: z.string().describe("Fact subject"),
+                predicate: z.string().describe("Fact predicate"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
+            },
+            async (params: any) => {
+                const { namespace, subject, predicate, agent_id } = params;
+                
+                if (!namespace) {
+                    throw new Error("namespace is required for temporal fact operations");
+                }
+                
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'get_current_temporal_fact',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1,
+                            null
+                        );
+                    }
+                }
+                
+                const fact = await get_current_fact(namespace, subject, predicate);
+                
+                if (!fact) {
+                    return {
+                        content: [{
+                            type: "text",
+                            text: `No current fact found for ${subject} ${predicate} in namespace ${namespace}`
+                        }]
+                    };
+                }
+                
+                return {
+                    content: [{
+                        type: "text",
+                        text: `${subject} ${predicate} ${fact.object} (confidence: ${fact.confidence.toFixed(2)}, valid from: ${fact.valid_from.toISOString()})`
+                    }],
+                    meta: {
+                        fact: {
+                            id: fact.id,
+                            subject: fact.subject,
+                            predicate: fact.predicate,
+                            object: fact.object,
+                            confidence: fact.confidence,
+                            valid_from: fact.valid_from.toISOString(),
+                            valid_to: fact.valid_to?.toISOString()
+                        }
+                    }
+                };
+            }
+        );
+
+        this.srv.tool("get_temporal_timeline",
+            "Get the complete timeline of a subject's temporal facts",
+            {
+                namespace: z.string().describe("Target namespace (required)"),
+                subject: z.string().describe("Fact subject to get timeline for"),
+                predicate: z.string().optional().describe("Filter by specific predicate"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
+            },
+            async (params: any) => {
+                const { namespace, subject, predicate, agent_id } = params;
+                
+                if (!namespace) {
+                    throw new Error("namespace is required for temporal fact operations");
+                }
+                
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'get_temporal_timeline',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1,
+                            null
+                        );
+                    }
+                }
+                
+                const timeline = await get_subject_timeline(namespace, subject, predicate);
+                
+                const summary = timeline.length > 0
+                    ? timeline.map((entry, idx) =>
+                        `${idx + 1}. [${entry.change_type}] ${entry.timestamp.toISOString()}: ${entry.subject} ${entry.predicate} ${entry.object}`
+                      ).join('\n')
+                    : `No timeline entries found for ${subject}${predicate ? ` ${predicate}` : ''}`;
+                
+                return {
+                    content: [{
+                        type: "text",
+                        text: summary
+                    }],
+                    meta: {
+                        namespace,
+                        subject,
+                        predicate,
+                        count: timeline.length,
+                        timeline: timeline.map(entry => ({
+                            timestamp: entry.timestamp.toISOString(),
+                            subject: entry.subject,
+                            predicate: entry.predicate,
+                            object: entry.object,
+                            change_type: entry.change_type,
+                            confidence: entry.confidence
+                        }))
+                    }
+                };
+            }
+        );
+
+        this.srv.tool("search_temporal_facts",
+            "Search temporal facts by pattern in subject, predicate, or object",
+            {
+                namespace: z.string().describe("Target namespace (required)"),
+                pattern: z.string().describe("Search pattern"),
+                field: z.enum(["subject", "predicate", "object"]).default("subject").describe("Field to search in"),
+                at: z.string().optional().describe("ISO date to query (default: now)"),
+                agent_id: z.string().optional().describe("Agent ID (optional, for logging)")
+            },
+            async (params: any) => {
+                const { namespace, pattern, field, at, agent_id } = params;
+                
+                if (!namespace) {
+                    throw new Error("namespace is required for temporal fact operations");
+                }
+                
+                // If agent_id provided, validate and log
+                if (agent_id) {
+                    const agent = this.agents.get(agent_id);
+                    if (agent) {
+                        agent.last_access = Date.now();
+                        await q.upd_agent_access.run(agent_id, Math.floor(Date.now() / 1000));
+                        
+                        await q.ins_access_log.run(
+                            agent_id,
+                            'search_temporal_facts',
+                            namespace,
+                            Math.floor(Date.now() / 1000),
+                            1,
+                            null
+                        );
+                    }
+                }
+                
+                const at_date = at ? new Date(at) : undefined;
+                const facts = await search_facts(namespace, pattern, field as any, at_date);
+                
+                const summary = facts.length > 0
+                    ? facts.map((f, idx) =>
+                        `${idx + 1}. ${f.subject} ${f.predicate} ${f.object} (confidence: ${f.confidence.toFixed(2)})`
+                      ).join('\n')
+                    : `No facts found matching '${pattern}' in ${field}`;
+                
+                return {
+                    content: [{
+                        type: "text",
+                        text: summary
+                    }],
+                    meta: {
+                        namespace,
+                        pattern,
+                        field,
+                        count: facts.length,
+                        facts: facts.map(f => ({
+                            id: f.id,
+                            subject: f.subject,
+                            predicate: f.predicate,
+                            object: f.object,
+                            confidence: f.confidence
+                        }))
+                    }
+                };
+            }
+        );
     }
 
     private getRegistrationTemplate(format: string): string {
@@ -435,7 +812,6 @@ export class OpenMemoryMCPProxy {
             agent_id: "my-ai-agent-v1",
             namespace: "agent-workspace",
             permissions: ["read", "write"],
-            shared_namespaces: ["team-shared", "public-knowledge"],
             description: "AI assistant for project management tasks"
         };
 
@@ -472,11 +848,6 @@ To register an agent with OpenMemory proxy, provide these parameters:
 - "write": Store new memories and update existing ones  
 - "admin": Full control including deletion and namespace management
 
-**shared_namespaces**: Additional namespaces your agent can access
-- Examples: ["team-shared", "public-knowledge", "company-policies"]
-- Useful for accessing common knowledge or team collaboration
-- Agents get read-only access to shared namespaces
-
 **description**: Human-readable description of your agent's purpose
 - Helps with documentation and management
 - Examples: "Customer support chatbot", "Research assistant for papers"
@@ -492,7 +863,6 @@ Use the 'register_agent' tool with these parameters to complete registration.`;
   "agent_id": "research-assistant-v2",
   "namespace": "research-data",
   "permissions": ["read", "write"],
-  "shared_namespaces": ["public-papers", "team-research"],
   "description": "AI assistant for academic research and paper analysis"
 }
 \`\`\`
@@ -503,7 +873,6 @@ Use the 'register_agent' tool with these parameters to complete registration.`;
   "agent_id": "support-bot-prod",
   "namespace": "customer-interactions", 
   "permissions": ["read", "write"],
-  "shared_namespaces": ["kb-articles", "product-docs"],
   "description": "Customer support chatbot with access to knowledge base"
 }
 \`\`\``;
@@ -517,13 +886,14 @@ Use the 'register_agent' tool with these parameters to complete registration.`;
         return `# OpenMemory MCP Proxy Service
 
 ## Overview
-Namespace-aware proxy for OpenMemory that provides secure multi-agent access with isolation and collaboration features.
+Namespace-aware proxy for OpenMemory that provides secure multi-agent access with isolation. Multiple agents can use the same namespace for collaboration.
 
 ## Capabilities
-- **Agent Registration**: Secure namespace isolation per agent
-- **Shared Namespaces**: Cross-agent collaboration spaces  
+- **Agent Registration**: Each agent is associated with a single namespace
+- **Namespace Sharing**: Multiple agents can use the same namespace for collaboration  
 - **Permission Management**: Read/write/admin access controls
 - **Memory Operations**: Query, store, reinforce memories with namespace awareness
+- **Temporal Knowledge**: Store and query time-bound facts with automatic versioning
 - **API Key Authentication**: Secure agent identification
 - **Template Generation**: Built-in registration guidance
 
@@ -541,6 +911,13 @@ Namespace-aware proxy for OpenMemory that provides secure multi-agent access wit
 - \`store_memory\` - Store new memories in agent namespace
 - \`reinforce_memory\` - Boost salience of specific memories
 
+### Temporal Knowledge Operations
+- \`store_temporal_fact\` - Store time-bound facts (e.g., "OpenAI has_CEO Sam Altman from 2023-01-01")
+- \`query_temporal_facts\` - Query facts at a specific point in time
+- \`get_current_temporal_fact\` - Get the current value of a fact
+- \`get_temporal_timeline\` - View complete history of changes for a subject
+- \`search_temporal_facts\` - Search for facts by pattern
+
 ## Current Configuration
 - Port: ${env.port}
 - Rate Limiting: ${env.rate_limit_enabled ? 'Enabled' : 'Disabled'}
@@ -551,6 +928,7 @@ Namespace-aware proxy for OpenMemory that provides secure multi-agent access wit
 2. \`register_agent\` -> Register your agent
 3. Save API key for authenticated operations
 4. Use \`query_memory\` and \`store_memory\` for operations
+5. Use temporal fact tools for time-aware knowledge management
 
 Ready to start building intelligent memory-aware applications! 🚀`;
     }
@@ -559,52 +937,36 @@ Ready to start building intelligent memory-aware applications! 🚀`;
         return `# Agent Registration Successful ✅
 
 **Agent ID**: ${registration.agent_id}
-**Primary Namespace**: ${registration.namespace}
+**Namespace**: ${registration.namespace}
 **Permissions**: ${registration.permissions.join(', ')}
-**Shared Namespaces**: ${registration.shared_namespaces.length > 0 ? registration.shared_namespaces.join(', ') : 'None'}
-**API Key**: ${registration.api_key}
 **Registration Date**: ${new Date(registration.registration_date).toISOString()}
 ${registration.description ? `**Description**: ${registration.description}` : ''}
 
-## 🔑 Important: Save Your API Key
-\`\`\`
-${registration.api_key}
-\`\`\`
-
 ## Next Steps
 
-### Test Connectivity
+### Query Memories
 \`\`\`json
 {
-  "agent_id": "${registration.agent_id}",
-  "query": "test query",
-  "api_key": "${registration.api_key}"
+  "namespace": "${registration.namespace}",
+  "query": "test query"
 }
 \`\`\`
 
 ### Store First Memory
 \`\`\`json
 {
-  "agent_id": "${registration.agent_id}",
-  "content": "This is my first memory in OpenMemory",
-  "api_key": "${registration.api_key}"
+  "namespace": "${registration.namespace}",
+  "content": "This is my first memory in OpenMemory"
 }
 \`\`\`
 
 Ready to start using OpenMemory! 🚀`;
     }
 
-    private generateApiKey(): string {
-        return 'omp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-    }
-
-    private validateAgent(agent_id: string, api_key?: string): AgentRegistration {
+    private validateAgent(agent_id: string): AgentRegistration {
         const agent = this.agents.get(agent_id);
         if (!agent) {
             throw new Error(`Agent '${agent_id}' is not registered`);
-        }
-        if (api_key && agent.api_key !== api_key) {
-            throw new Error("Invalid API key provided");
         }
         return agent;
     }
@@ -615,15 +977,9 @@ Ready to start using OpenMemory! 🚀`;
         operation: string = 'read'
     ): void {
         const isPrimaryNamespace = namespace === agent.namespace;
-        const hasSharedAccess = agent.shared_namespaces.includes(namespace);
         
-        if (!isPrimaryNamespace && !hasSharedAccess) {
-            throw new Error(`Access denied: Agent '${agent.agent_id}' cannot access namespace '${namespace}'`);
-        }
-        
-        // Write/admin operations only allowed in primary namespace
-        if ((operation === 'write' || operation === 'admin') && !isPrimaryNamespace) {
-            throw new Error(`Write access denied: Agent can only write to primary namespace '${agent.namespace}'`);
+        if (!isPrimaryNamespace) {
+            throw new Error(`Access denied: Agent '${agent.agent_id}' can only access its namespace '${agent.namespace}'`);
         }
         
         // Admin operations require admin permission
@@ -642,9 +998,14 @@ Ready to start using OpenMemory! 🚀`;
             // Check if agent_registrations table exists before trying to load data
             const tableExists = await this.checkTableExists('agent_registrations');
             if (!tableExists) {
+                this.agents.clear();
+                this.namespaces.clear();
                 console.log(`[MCP Proxy] Agent registration tables not found, skipping data load. Run migration to create tables.`);
                 return;
             }
+
+            this.agents.clear();
+            this.namespaces.clear();
 
             // Load agents from database
             const agents = await q.all_agents.all();
@@ -653,8 +1014,6 @@ Ready to start using OpenMemory! 🚀`;
                     agent_id: agent.agent_id,
                     namespace: agent.namespace,
                     permissions: JSON.parse(agent.permissions),
-                    shared_namespaces: JSON.parse(agent.shared_namespaces),
-                    api_key: agent.api_key,
                     description: agent.description,
                     registration_date: agent.registration_date * 1000, // Convert from Unix timestamp
                     last_access: agent.last_access * 1000
@@ -666,7 +1025,6 @@ Ready to start using OpenMemory! 🚀`;
             for (const ns of namespaces) {
                 this.namespaces.set(ns.namespace, {
                     namespace: ns.namespace,
-                    group_type: ns.group_type,
                     description: ns.description,
                     created_by: ns.created_by,
                     created_at: ns.created_at * 1000
@@ -679,11 +1037,31 @@ Ready to start using OpenMemory! 🚀`;
         }
     }
 
+    public async refreshCache(): Promise<void> {
+        await this.loadPersistedData();
+    }
+
     private async checkTableExists(tableName: string): Promise<boolean> {
         try {
-            const result = await get_async(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [tableName]);
+            if (env.metadata_backend === "postgres") {
+                const schema = process.env.OM_PG_SCHEMA || "public";
+                const qualified = tableName.includes(".")
+                    ? tableName
+                    : `${schema}.${tableName}`;
+                const result = await get_async(
+                    "SELECT to_regclass($1) as tbl",
+                    [qualified],
+                );
+                return !!result?.tbl;
+            }
+
+            const result = await get_async(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                [tableName],
+            );
             return !!result;
         } catch (error) {
+            console.warn("[MCP Proxy] checkTableExists failed:", error);
             return false;
         }
     }

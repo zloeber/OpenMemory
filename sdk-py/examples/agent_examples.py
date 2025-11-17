@@ -26,8 +26,7 @@ def example_basic_agent_registration():
             agent_id="research-assistant-py",
             namespace="research-data",
             description="Python research assistant for data analysis",
-            permissions=["read", "write"],
-            shared_namespaces=["public-papers", "team-knowledge"]
+            permissions=["read", "write"]
         )
         
         print(f"✅ Agent registered successfully!")
@@ -35,7 +34,6 @@ def example_basic_agent_registration():
         print(f"   Namespace: {agent.namespace}")
         print(f"   API Key: {agent.api_key[:10]}...")
         print(f"   Permissions: {agent.permissions}")
-        print(f"   Shared Namespaces: {agent.shared_namespaces}")
         
         return agent
         
@@ -55,8 +53,7 @@ def example_manual_registration():
             agent_id="data-analyst-py",
             namespace="analytics-workspace",
             description="Data analysis and visualization agent",
-            permissions=["read", "write", "admin"],
-            shared_namespaces=["company-metrics", "public-datasets"]
+            permissions=["read", "write", "admin"]
         )
         
         print(f"✅ Manual registration successful!")
@@ -134,27 +131,14 @@ def example_namespace_operations(agent: OpenMemoryAgent):
     print("=" * 50)
     
     try:
-        # Store memory in different namespace (if accessible)
-        if agent.shared_namespaces:
-            shared_ns = agent.shared_namespaces[0]
-            result = agent.store_memory(
-                content="Shared knowledge: Best practices for Python development",
-                namespace=shared_ns,
-                sector="semantic",
-                salience=0.7,
-                metadata={"category": "best_practices", "language": "python"}
-            )
-            print(f"✅ Stored in shared namespace '{shared_ns}': {result.get('memory_id')}")
-            
-            # Query from shared namespace
-            query_result = agent.query_memory(
-                query="python development practices",
-                namespace=shared_ns,
-                k=3
-            )
-            print(f"✅ Found {query_result.get('total_results', 0)} memories in shared namespace")
-        else:
-            print("ℹ️  No shared namespaces available for this agent")
+        # Store memory in agent's primary namespace
+        result = agent.store_memory(
+            content="Best practices for Python development",
+            sector="semantic",
+            salience=0.7,
+            metadata={"category": "best_practices", "language": "python"}
+        )
+        print(f"✅ Stored in namespace '{agent.namespace}': {result.get('memory_id')}")
         
         # Query from agent's primary namespace
         query_result = agent.query_memory(
@@ -284,56 +268,56 @@ def example_health_monitoring():
 
 
 def example_collaboration_scenario():
-    """Demonstrate multi-agent collaboration."""
-    print(f"\n🤝 Multi-Agent Collaboration Scenario")
+    """Demonstrate agents working in their own namespaces."""
+    print(f"\n🤝 Multi-Agent Namespace Isolation Scenario")
     print("=" * 50)
     
     try:
-        # Create multiple agents with shared namespace access
+        # Create multiple agents with separate namespaces
         researcher = OpenMemoryAgent(
             agent_id="researcher-alpha",
             namespace="research-alpha",
-            shared_namespaces=["team-knowledge", "public-papers"],
             description="Research agent for data collection",
             auto_register=True
         )
         
         analyst = OpenMemoryAgent(
             agent_id="analyst-beta",
-            namespace="analysis-beta", 
-            shared_namespaces=["team-knowledge", "research-reports"],
+            namespace="analysis-beta",
             description="Analysis agent for data processing",
             auto_register=True
         )
         
-        # Researcher stores findings in shared space
+        # Researcher stores findings in their namespace
         researcher.store_memory(
             content="New research paper on attention mechanisms shows 15% improvement",
-            namespace="team-knowledge",
             sector="semantic",
             salience=0.9,
             metadata={"source": "arxiv", "topic": "attention", "improvement": 0.15}
         )
-        print("✅ Researcher stored findings in shared namespace")
+        print("✅ Researcher stored findings in their namespace")
         
-        # Analyst queries shared knowledge
-        results = analyst.query_memory(
-            query="attention mechanisms improvement",
-            namespace="team-knowledge",
-            k=3
-        )
-        print(f"✅ Analyst found {results.get('total_results', 0)} relevant findings")
-        
-        # Analyst stores analysis in their own namespace
+        # Analyst stores analysis in their namespace
         analyst.store_memory(
             content="Analysis shows attention mechanism improvements correlate with dataset size",
             sector="reflective",
             salience=0.8,
-            metadata={"analysis_type": "correlation", "based_on": "team_research"}
+            metadata={"analysis_type": "correlation"}
         )
-        print("✅ Analyst stored analysis in private namespace")
+        print("✅ Analyst stored analysis in their namespace")
         
-        # Both agents can access their respective memories plus shared knowledge
+        # Each agent can only access their own namespace
+        researcher_results = researcher.query_memory(
+            query="attention mechanisms",
+            k=5
+        )
+        print(f"✅ Researcher found {researcher_results.get('total_results', 0)} memories in their namespace")
+        
+        analyst_results = analyst.query_memory(
+            query="attention mechanisms",
+            k=5
+        )
+        print(f"✅ Analyst found {analyst_results.get('total_results', 0)} memories in their namespace (should be 0 - isolated)")
         researcher_memories = researcher.query_memory("research paper attention", k=5)
         analyst_memories = analyst.query_memory("analysis correlation", k=5)
         
