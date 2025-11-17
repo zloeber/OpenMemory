@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "http";
-import { create_proxy_srv } from "../ai/mcp-proxy";
+import { mcp_proxy } from "../ai/mcp-proxy";
 import { env } from "../core/cfg";
 import { q } from "../core/db";
 
@@ -17,10 +17,8 @@ export const proxy_only_mode_middleware = (req: any, res: any, next: any) => {
     // Allow proxy endpoints, Swagger, dashboard, and system endpoints
     const allowedPaths = [
         '/mcp-proxy',
-        '/api/agents',
         '/api/namespaces',
         '/api/proxy-info',
-        '/api/registration-template',
         '/api/proxy-health',
         '/api-docs',
         '/swagger',
@@ -40,30 +38,16 @@ export const proxy_only_mode_middleware = (req: any, res: any, next: any) => {
     // Block all other routes in proxy-only mode
     res.status(403).json({
         error: "Forbidden",
-        message: "This endpoint is not available in proxy-only mode. Only MCP proxy, agent management, and monitoring endpoints are accessible.",
+        message: "This endpoint is not available in proxy-only mode. Only MCP proxy, namespace management, and monitoring endpoints are accessible.",
         available_endpoints: allowedPaths
     });
 };
 
-// Global proxy instance
-let proxyInstance: ReturnType<typeof create_proxy_srv> | null = null;
-
-export const get_proxy_instance = () => {
-    if (!proxyInstance) {
-        proxyInstance = create_proxy_srv();
-    }
-    return proxyInstance;
-};
-
 export const proxy_routes = (app: any) => {
-    // Delay proxy creation until routes are actually called
-    const getProxy = () => get_proxy_instance();
-
     // MCP proxy HTTP endpoint
     app.post("/mcp-proxy", async (req: IncomingMessage, res: ServerResponse) => {
         try {
-            const proxy = getProxy();
-            await proxy.httpHandler(req, res);
+            mcp_proxy.handleHTTP(req, res);
         } catch (error) {
             res.statusCode = 500;
             res.setHeader("Content-Type", "application/json");
@@ -102,204 +86,7 @@ export const proxy_routes = (app: any) => {
     app.put("/mcp-proxy", methodNotAllowed);
     app.delete("/mcp-proxy", methodNotAllowed);
 
-    // REST endpoints for direct agent management using database queries
-    app.get("/api/agents", async (req: any, res: any) => {
-        try {
-            const agents = await q.all_agents.all();
-            res.json({ 
-                agents: agents.map(agent => ({
-                    agent_id: agent.agent_id,
-                    namespace: agent.namespace,
-                    permissions: JSON.parse(agent.permissions),
-                    shared_namespaces: JSON.parse(agent.shared_namespaces),
-                    description: agent.description,
-                    registration_date: new Date(agent.registration_date * 1000).toISOString(),
-                    last_access: new Date(agent.last_access * 1000).toISOString()
-                })), 
-                total: agents.length 
-            });
-        } catch (error) {
-            res.status(500).json({ 
-                error: "Failed to list agents", 
-                message: error instanceof Error ? error.message : String(error)
-            });
-        }
-    });
-
-    app.get("/api/agents/:agent_id", async (req: any, res: any) => {
-        try {
-            const { agent_id } = req.params;
-            const agent = await q.get_agent.get(agent_id);
-            
-            if (!agent) {
-                return res.status(404).json({ error: "Agent not found" });
-            }
-
-            res.json({
-                agent_id: agent.agent_id,
-                namespace: agent.namespace,
-                permissions: JSON.parse(agent.permissions),
-                shared_namespaces: JSON.parse(agent.shared_namespaces),
-                description: agent.description,
-                registration_date: new Date(agent.registration_date * 1000).toISOString(),
-                last_access: new Date(agent.last_access * 1000).toISOString()
-            });
-        } catch (error) {
-            res.status(500).json({ 
-                error: "Failed to get agent", 
-                message: error instanceof Error ? error.message : String(error)
-            });
-        }
-    });
-
-    app.post("/api/agents", async (req: any, res: any) => {
-        try {
-            const { agent_id, namespace, permissions = ['read', 'write'], description = '' } = req.body;
-
-            // Validate required fields
-            if (!agent_id || !namespace) {
-                return res.status(400).json({ 
-                    error: "Missing required fields", 
-                    message: "agent_id and namespace are required" 
-                });
-            }
-
-            // Validate agent_id format
-            if (!/^[a-zA-Z0-9_-]+$/.test(agent_id)) {
-                return res.status(400).json({ 
-                    error: "Invalid agent_id", 
-                    message: "agent_id must contain only alphanumeric characters, hyphens, and underscores" 
-                });
-            }
-
-            // Check if agent already exists
-            const existingAgent = await q.get_agent.get(agent_id);
-            const now = Math.floor(Date.now() / 1000);
-            
-            let operation: string;
-            let message: string;
-
-            if (existingAgent) {
-                // Update existing agent (idempotent operation)
-                operation = 'update';
-                message = `Agent '${agent_id}' updated successfully`;
-
-                // Database query parameter order differs between PostgreSQL and SQLite
-                if (env.metadata_backend === 'postgres') {
-                    // PostgreSQL: agent_id, namespace, permissions, description, last_access
-                    await q.upd_agent.run(
-                        agent_id,
-                        namespace,
-                        JSON.stringify(permissions),
-                        description,
-                        now
-                    );
-                } else {
-                    // SQLite: namespace, permissions, description, last_access, agent_id
-                    await q.upd_agent.run(
-                        namespace,
-                        JSON.stringify(permissions),
-                        description,
-                        now,
-                        agent_id
-                    );
-                }
-            } else {
-                // Create new agent
-                operation = 'register';
-                message = `Agent '${agent_id}' registered successfully`;
-
-                await q.ins_agent.run(
-                    agent_id,
-                    namespace,
-                    JSON.stringify(permissions),
-                    description,
-                    now,  // registration_date
-                    now,  // last_access
-                    1     // active
-                );
-            }
-
-            // Log the operation
-            await q.ins_access_log.run(
-                agent_id,
-                operation,
-                namespace,
-                now,
-                1,    // success
-                null  // error_message
-            );
-
-            const proxy = getProxy();
-            if (proxy?.refreshCache) {
-                await proxy.refreshCache();
-            }
-
-            res.json({
-                success: true,
-                agent_id: agent_id,
-                namespace: namespace,
-                permissions: permissions,
-                description: description,
-                message: message
-            });
-
-        } catch (error) {
-            console.error('[AGENT REGISTRATION] Error:', error);
-            res.status(500).json({ 
-                error: "Failed to register agent", 
-                message: error instanceof Error ? error.message : String(error)
-            });
-        }
-    });
-
-    app.delete("/api/agents/:agent_id", async (req: any, res: any) => {
-        const { agent_id } = req.params;
-
-        if (!agent_id) {
-            return res.status(400).json({ error: "Agent ID is required" });
-        }
-
-        try {
-            const agent = await q.get_agent.get(agent_id);
-            if (!agent) {
-                return res.status(404).json({ error: "Agent not found" });
-            }
-
-            const now = Math.floor(Date.now() / 1000);
-
-            await q.clear_namespace_creator.run(agent_id);
-            await q.deactivate_agent.run(agent_id, now);
-
-            await q.ins_access_log.run(
-                agent_id,
-                "deactivate",
-                agent.namespace,
-                now,
-                1,
-                null,
-            );
-
-            const proxy = getProxy();
-            if (proxy?.refreshCache) {
-                await proxy.refreshCache();
-            }
-
-            res.json({
-                success: true,
-                agent_id,
-                namespace: agent.namespace,
-                message: `Agent '${agent_id}' deactivated`,
-            });
-        } catch (error) {
-            console.error('[AGENT DEACTIVATE] Error:', error);
-            res.status(500).json({
-                error: "Failed to deactivate agent",
-                message: error instanceof Error ? error.message : String(error),
-            });
-        }
-    });
-
+    // REST endpoints for namespace management
     app.get("/api/namespaces", async (req: any, res: any) => {
         try {
             const namespaces = await q.all_namespaces.all();
@@ -307,7 +94,6 @@ export const proxy_routes = (app: any) => {
                 namespaces: namespaces.map(ns => ({
                     namespace: ns.namespace,
                     description: ns.description,
-                    created_by: ns.created_by,
                     created_at: new Date(ns.created_at * 1000).toISOString(),
                     updated_at: new Date(ns.updated_at * 1000).toISOString()
                 })), 
@@ -321,114 +107,72 @@ export const proxy_routes = (app: any) => {
         }
     });
 
-    app.get("/api/namespaces/summary", async (_req: any, res: any) => {
+    app.get("/api/namespaces/:namespace", async (req: any, res: any) => {
         try {
-            const [namespaces, agents] = await Promise.all([
-                q.all_namespaces.all(),
-                q.all_agents.all(),
-            ]);
-
-            const primaryCounts = new Map<string, number>();
-            const allNamespaceNames = new Set<string>();
-
-            // Track all namespaces from the namespace_groups table
-            for (const ns of namespaces) {
-                allNamespaceNames.add(ns.namespace);
+            const { namespace } = req.params;
+            const ns = await q.get_namespace.get(namespace);
+            
+            if (!ns) {
+                return res.status(404).json({ error: "Namespace not found" });
             }
-
-            // Process agents and track all referenced namespaces
-            for (const agent of agents) {
-                const primaryNs = agent.namespace;
-                allNamespaceNames.add(primaryNs);
-                primaryCounts.set(primaryNs, (primaryCounts.get(primaryNs) || 0) + 1);
-            }
-
-            // Create namespace lookup from database entries
-            const namespaceMap = new Map(namespaces.map(ns => [ns.namespace, ns]));
-
-            // Build summary for all namespaces (from DB and from agent references)
-            const summary = Array.from(allNamespaceNames).map(namespaceName => {
-                const ns = namespaceMap.get(namespaceName);
-                const createdAtSeconds = ns ? Number(ns.created_at ?? 0) : Math.floor(Date.now() / 1000);
-                const updatedAtSeconds = ns ? Number(ns.updated_at ?? createdAtSeconds) : createdAtSeconds;
-                
-                return {
-                    namespace: namespaceName,
-                    description: ns?.description || null,
-                    created_by: ns?.created_by || null,
-                    created_at: new Date(createdAtSeconds * 1000).toISOString(),
-                    updated_at: new Date(updatedAtSeconds * 1000).toISOString(),
-                    primary_agent_count: primaryCounts.get(namespaceName) || 0,
-                    active: ns?.active !== undefined ? ns.active === 1 || ns.active === true : true,
-                };
-            });
 
             res.json({
-                namespaces: summary,
-                totals: {
-                    totalNamespaces: summary.length,
-                    totalAgents: agents.length,
-                    orphanedNamespaces: summary.filter((ns) => ns.primary_agent_count === 0).length,
-                },
+                namespace: ns.namespace,
+                description: ns.description,
+                created_at: new Date(ns.created_at * 1000).toISOString(),
+                updated_at: new Date(ns.updated_at * 1000).toISOString()
             });
         } catch (error) {
-            res.status(500).json({
-                error: "Failed to summarize namespaces",
-                message: error instanceof Error ? error.message : String(error),
+            res.status(500).json({ 
+                error: "Failed to get namespace", 
+                message: error instanceof Error ? error.message : String(error)
             });
         }
     });
 
     app.post("/api/namespaces", async (req: any, res: any) => {
-        const { namespace, description = "", created_by } = req.body || {};
-
-        if (!namespace) {
-            return res.status(400).json({ error: "namespace is required" });
-        }
-
-        if (!/^[a-zA-Z0-9_-]+$/.test(namespace)) {
-            return res.status(400).json({
-                error: "Invalid namespace",
-                message: "namespace must contain only alphanumeric characters, hyphens, and underscores",
-            });
-        }
-
         try {
-            const now = Math.floor(Date.now() / 1000);
-            const existing = await q.get_namespace.get(namespace);
-            const createdAt = existing ? Number(existing.created_at ?? now) : now;
-            const creator = typeof created_by === "string" && created_by.trim().length > 0
-                ? created_by.trim()
-                : existing?.created_by ?? null;
+            const { namespace, description = '' } = req.body;
 
+            // Validate required fields
+            if (!namespace) {
+                return res.status(400).json({ 
+                    error: "Missing required fields", 
+                    message: "namespace is required" 
+                });
+            }
+
+            // Validate namespace format
+            if (!/^[a-zA-Z0-9_-]+$/.test(namespace)) {
+                return res.status(400).json({ 
+                    error: "Invalid namespace", 
+                    message: "namespace must contain only alphanumeric characters, hyphens, and underscores" 
+                });
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+
+            // Idempotent: insert or update
             await q.ins_namespace.run(
                 namespace,
                 description,
-                creator,
-                createdAt,
                 now,
-                1,
+                now,
+                1 // active
             );
-
-            const proxy = getProxy();
-            if (proxy?.refreshCache) {
-                await proxy.refreshCache();
-            }
 
             res.json({
                 success: true,
-                namespace,
-                description,
-                created_by: creator,
-                created_at: new Date(createdAt * 1000).toISOString(),
-                updated_at: new Date(now * 1000).toISOString(),
-                message: existing ? `Namespace '${namespace}' updated` : `Namespace '${namespace}' created`,
+                namespace: namespace,
+                description: description,
+                message: `Namespace '${namespace}' created successfully`
             });
+
         } catch (error) {
-            console.error('[NAMESPACE UPSERT] Error:', error);
-            res.status(500).json({
-                error: "Failed to upsert namespace",
-                message: error instanceof Error ? error.message : String(error),
+            console.error('[NAMESPACE CREATE] Error:', error);
+            res.status(500).json({ 
+                error: "Failed to create namespace", 
+                message: error instanceof Error ? error.message : String(error)
             });
         }
     });
@@ -437,186 +181,84 @@ export const proxy_routes = (app: any) => {
         const { namespace } = req.params;
 
         if (!namespace) {
-            return res.status(400).json({ error: "namespace is required" });
+            return res.status(400).json({ error: "Namespace is required" });
         }
 
         try {
-            const existing = await q.get_namespace.get(namespace);
-            if (!existing) {
+            const ns = await q.get_namespace.get(namespace);
+            if (!ns) {
                 return res.status(404).json({ error: "Namespace not found" });
-            }
-
-            const agents = await q.all_agents.all();
-            const activeAgents = agents.filter((agent: any) => agent.namespace === namespace);
-            if (activeAgents.length > 0) {
-                return res.status(400).json({
-                    error: "Namespace in use",
-                    message: "Reassign or deactivate agents that rely on this namespace before disabling it",
-                });
             }
 
             const now = Math.floor(Date.now() / 1000);
             await q.deactivate_namespace.run(namespace, now);
 
-            const proxy = getProxy();
-            if (proxy?.refreshCache) {
-                await proxy.refreshCache();
-            }
-
             res.json({
                 success: true,
                 namespace,
-                message: `Namespace '${namespace}' deactivated`,
+                message: `Namespace '${namespace}' deactivated`
             });
         } catch (error) {
             console.error('[NAMESPACE DEACTIVATE] Error:', error);
             res.status(500).json({
                 error: "Failed to deactivate namespace",
-                message: error instanceof Error ? error.message : String(error),
+                message: error instanceof Error ? error.message : String(error)
             });
         }
     });
 
-    app.get("/api/proxy-info", async (req: any, res: any) => {
+    app.get("/api/proxy-info", async (_req: any, res: any) => {
         try {
-            const agentCount = (await q.all_agents.all()).length;
-            const namespaceCount = (await q.all_namespaces.all()).length;
+            const namespaces = await q.all_namespaces.all();
             
-            const info = {
+            res.json({
                 service: "OpenMemory MCP Proxy",
-                version: "1.0.0",
-                capabilities: [
-                    "Agent Registration",
-                    "Namespace Management",
-                    "Memory Operations",
-                    "Access Control",
-                    "Registration Templates"
-                ],
-                statistics: {
-                    registered_agents: agentCount,
-                    namespaces: namespaceCount,
-                    port: env.port,
-                    database: env.db_path
-                },
+                version: "2.0.0",
+                architecture: "namespace-based",
+                description: "Authentication-agnostic memory API with namespace isolation",
+                mcp_protocol: "2025-06-18",
                 endpoints: {
-                    mcp: "/mcp-proxy",
-                    agents: "/api/agents",
+                    mcp_proxy: "/mcp-proxy",
                     namespaces: "/api/namespaces",
-                    templates: "/api/registration-template",
-                    health: "/api/proxy-health"
-                }
-            };
-            
-            res.json(info);
+                    proxy_info: "/api/proxy-info",
+                    proxy_health: "/api/proxy-health"
+                },
+                statistics: {
+                    total_namespaces: namespaces.length
+                },
+                features: [
+                    "Namespace-based isolation",
+                    "On-demand namespace creation",
+                    "Temporal knowledge graph",
+                    "MCP protocol support",
+                    "Ready for OIDC proxy integration"
+                ]
+            });
         } catch (error) {
-            res.status(500).json({ 
-                error: "Failed to get proxy info", 
+            res.status(500).json({
+                error: "Failed to get proxy info",
                 message: error instanceof Error ? error.message : String(error)
             });
         }
     });
 
-    app.get("/api/registration-template/:format?", async (req: any, res: any) => {
+    app.get("/api/proxy-health", async (_req: any, res: any) => {
         try {
-            const format = req.params.format || 'json';
+            const namespaces = await q.all_namespaces.all();
             
-            const baseTemplate = {
-                agent_id: "my-ai-agent-v1",
-                namespace: "agent-workspace",
-                permissions: ["read", "write"],
-                shared_namespaces: ["team-shared", "public-knowledge"],
-                description: "AI assistant for project management tasks"
-            };
-
-            switch (format) {
-                case 'json':
-                    res.json({ template: baseTemplate });
-                    break;
-                case 'curl':
-                    res.setHeader('Content-Type', 'text/plain');
-                    res.send(`# Register via MCP proxy
-# Use your MCP client to call: register_agent
-
-${JSON.stringify(baseTemplate, null, 2)}`);
-                    break;
-                case 'example':
-                    res.setHeader('Content-Type', 'text/markdown');
-                    res.send(`# Example Agent Registrations
-
-## Research Assistant
-\`\`\`json
-{
-  "agent_id": "research-assistant-v2",
-  "namespace": "research-data",
-  "permissions": ["read", "write"],
-  "shared_namespaces": ["public-papers", "team-research"],
-  "description": "AI assistant for academic research and paper analysis"
-}
-\`\`\`
-
-## Customer Support Bot
-\`\`\`json
-{
-  "agent_id": "support-bot-prod",
-  "namespace": "customer-interactions", 
-  "permissions": ["read", "write"],
-  "shared_namespaces": ["kb-articles", "product-docs"],
-  "description": "Customer support chatbot with access to knowledge base"
-}
-\`\`\`
-
-## Data Analysis Agent
-\`\`\`json
-{
-  "agent_id": "data-analyst-01",
-  "namespace": "analytics-workspace",
-  "permissions": ["read", "write", "admin"],
-  "shared_namespaces": ["company-metrics", "historical-data"],
-  "description": "Automated data analysis with full workspace control"
-}
-\`\`\``);
-                    break;
-                default:
-                    res.json({ template: baseTemplate });
-            }
+            res.json({
+                status: "healthy",
+                service: "openmemory-mcp-proxy",
+                version: "2.0.0",
+                architecture: "namespace-based",
+                timestamp: new Date().toISOString(),
+                namespaces_active: namespaces.length
+            });
         } catch (error) {
-            res.status(500).json({ 
-                error: "Failed to get registration template", 
-                message: error instanceof Error ? error.message : String(error)
+            res.status(503).json({
+                status: "unhealthy",
+                error: error instanceof Error ? error.message : String(error)
             });
         }
     });
-
-    // Health check for proxy service
-    app.get("/api/proxy-health", (req: any, res: any) => {
-        res.json({ 
-            status: "healthy", 
-            service: "openmemory-mcp-proxy",
-            timestamp: new Date().toISOString(),
-            version: "1.0.0",
-            uptime: process.uptime()
-        });
-    });
-
-    console.log(`[OpenMemory] MCP Proxy service initialized on port ${env.port}`);
-    console.log(`[OpenMemory] Proxy endpoints:`);
-    console.log(`  POST /mcp-proxy - MCP protocol endpoint`);
-    console.log(`  GET /api/agents - List registered agents`);
-    console.log(`  GET /api/agents/:id - Get specific agent`);
-    console.log(`  GET /api/namespaces - List namespaces`);
-    console.log(`  GET /api/proxy-info - Service information`);
-    console.log(`  GET /api/registration-template/:format - Registration templates`);
-    console.log(`  GET /api/proxy-health - Health check`);
-};
-
-// Standalone proxy server function
-export const start_proxy_server = async (port?: number) => {
-    const proxy = get_proxy_instance();
-    const serverPort = port || env.port + 1; // Use different port than main service
-    
-    console.log(`[OpenMemory] Starting standalone MCP proxy server on port ${serverPort}`);
-    
-    // For standalone operation, you would typically set up an HTTP server here
-    // This is a placeholder for future standalone server implementation
-    await proxy.stdioHandler(); // For now, use stdio mode
 };

@@ -12,7 +12,6 @@ import { start_reflection } from "../memory/reflect";
 import { start_user_summary_reflection } from "../memory/user_summary";
 import { sendTelemetry } from "../core/telemetry";
 import { req_tracker_mw } from "./routes/dashboard";
-import { runMigration } from "../scripts/migrate-agent-tables";
 
 const ASC = `   ____                   __  __                                 
   / __ \\                 |  \\/  |                                
@@ -27,20 +26,9 @@ const ASC = `   ____                   __  __
 async function initializeServer() {
     console.log("[DEBUG] initializeServer started");
     
-    // Run migrations first before any server setup if proxy is enabled
+    // Setup proxy if enabled
     const proxyEnabled = process.env.OM_MCP_PROXY_ENABLED !== 'false';
     console.log("[DEBUG] proxyEnabled:", proxyEnabled);
-    
-    if (proxyEnabled) {
-        console.log("[MCP PROXY] Running migrations before server initialization...");
-        try {
-            await runMigration();
-            console.log("[MCP PROXY] Migration completed successfully");
-        } catch (error) {
-            console.error("[MCP PROXY] Migration failed:", error);
-            // Continue anyway, but note the failure
-        }
-    }
 
     const app = server({ max_payload_size: env.max_payload_size });
 
@@ -101,11 +89,9 @@ async function initializeServer() {
         console.log(`[OpenMemory] ${modeLabel} initialized on port`, env.port);
         console.log("[OpenMemory] Proxy endpoints:");
         console.log("  POST /mcp-proxy - MCP protocol endpoint");
-        console.log("  GET /api/agents - List registered agents");
-        console.log("  GET /api/agents/:id - Get specific agent");
         console.log("  GET /api/namespaces - List namespaces");
+        console.log("  GET /api/namespaces/:id - Get specific namespace");
         console.log("  GET /api/proxy-info - Service information");
-        console.log("  GET /api/registration-template/:format - Registration templates");
         console.log("  GET /api/proxy-health - Health check");
         
         if (env.proxy_only_mode) {
