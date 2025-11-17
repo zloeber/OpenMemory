@@ -32,6 +32,7 @@ except ImportError:
 try:
     from crewai import Agent, Task, Crew, Process
     from crewai.tools import BaseTool
+    from crewai import LLM
 except ImportError:
     print("Error: crewai package not found. Please install it with: pip install crewai")
     sys.exit(1)
@@ -210,13 +211,14 @@ class FlowDefinition:
 class FlowLauncher:
     """Handles loading and launching CrewAI flows from YAML definitions."""
     
-    def __init__(self, flow_file: str, whatif: bool = False):
+    def __init__(self, flow_file: str, whatif: bool = False, verbose: bool = False):
         """
         Initialize the flow launcher.
         
         Args:
             flow_file: Path to the YAML flow definition file
             whatif: If True, only show configuration without executing
+            verbose: If True, enable verbose output in agents
         """
         self.flow_file = Path(flow_file)
         self.flow_def: Optional[FlowDefinition] = None
@@ -224,6 +226,7 @@ class FlowLauncher:
         self.tasks: Dict[str, Task] = {}
         self.tools: List[Any] = []
         self.whatif = whatif
+        self.verbose = verbose
         self.mcp_sessions: List[Any] = []
         self.mcp_contexts: List[Any] = []
         
@@ -745,50 +748,31 @@ class FlowLauncher:
         
         try:
             if provider == 'ollama':
-                # CrewAI uses LiteLLM internally, so we just need to format the model correctly
-                # and set the environment variable for the Ollama base URL
+                # Use CrewAI's native LLM class for Ollama
+                # This provides better integration than LangChain wrappers
                 import os
                 
                 # Set Ollama base URL if provided
                 if base_url:
                     os.environ['OLLAMA_API_BASE'] = base_url
-                    print(f"  Setting OLLAMA_API_BASE={base_url}")
                 
-                # Test if LiteLLM is available and can connect
-                try:
-                    from litellm import completion
-                    
-                    # Use ollama_chat/ prefix for chat models
-                    litellm_model = f"ollama_chat/{model}"
-                    
-                    # Test the connection
-                    try:
-                        test_response = completion(
-                            model=litellm_model,
-                            messages=[{"role": "user", "content": "test"}],
-                            temperature=temperature,
-                            max_tokens=10
-                        )
-                        print(f"  ✅ LiteLLM connection test successful")
-                        print(f"  ✅ Using model: {litellm_model}")
-                        
-                        # Return the LiteLLM model string - CrewAI will use it with LiteLLM
-                        # We return it as a string, and CrewAI's LLM layer will handle it
-                        return litellm_model
-                    
-                    except Exception as test_error:
-                        print(f"  ❌ Connection test failed: {test_error}")
-                        print(f"  Make sure Ollama is running at {base_url or 'http://localhost:11434'}")
-                        print(f"  And model '{model}' is available")
-                        print(f"\n  ⚠️  Without a configured LLM, CrewAI will default to OpenAI!")
-                        return None
+                # CrewAI's LLM class expects ollama/ prefix for Ollama models
+                llm_model = f"ollama/{model}"
                 
-                except ImportError:
-                    print(f"  ❌ ERROR: LiteLLM not found")
-                    print(f"  CrewAI requires LiteLLM for Ollama support")
-                    print(f"  Install with: pip install litellm")
-                    print(f"\n  ⚠️  Without a configured LLM, CrewAI will default to OpenAI!")
-                    return None
+                llm = LLM(
+                    model=llm_model,
+                    base_url=base_url,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=300,  # 5 minute timeout for LLM responses
+                )
+                
+                print(f"  ✅ Using CrewAI native LLM class")
+                print(f"  ✅ Model: {llm_model}")
+                if base_url:
+                    print(f"  ✅ Base URL: {base_url}")
+                print(f"  ✅ Timeout: 300s")
+                return llm
             
             elif provider == 'openai':
                 from langchain_openai import ChatOpenAI
@@ -845,20 +829,49 @@ class FlowLauncher:
         memory_namespace = agent_config.get('memory_namespace')
         allow_delegation = agent_config.get('allow_delegation', False)
         
+        # Ensure role is a string
+        if isinstance(role, list):
+            role = '\n'.join(str(item) for item in role)
+        elif not isinstance(role, str):
+            role = str(role)
+        
+        # Ensure goal and instructions are strings, not lists
+        if isinstance(goal, list):
+            goal = '\n'.join(str(item) for item in goal)
+        elif not isinstance(goal, str):
+            goal = str(goal)
+            
+        if isinstance(instructions, list):
+            instructions = '\n'.join(str(item) for item in instructions)
+        elif not isinstance(instructions, str):
+            instructions = str(instructions)
+        
         # Create backstory from instructions
         backstory = instructions if instructions else f"Agent responsible for {role}"
         
+        # Ensure backstory is explicitly a string
+        if not isinstance(backstory, str):
+            backstory = str(backstory)
+        
         # Configure LLM if available
         llm = self._configure_llm(agent_config)
+        
+        # Extra validation: ensure all string parameters are actually strings
+        role = str(role) if not isinstance(role, str) else role
+        goal = str(goal) if not isinstance(goal, str) else goal
+        backstory = str(backstory) if not isinstance(backstory, str) else backstory
         
         agent_params = {
             'role': role,
             'goal': goal,
             'backstory': backstory,
-            'verbose': True,
+            'verbose': self.verbose,
             'allow_delegation': allow_delegation,
-            'tools': self.tools,
         }
+        
+        # Only add tools if we have any (avoid passing empty list)
+        if self.tools:
+            agent_params['tools'] = self.tools
         
         if llm:
             agent_params['llm'] = llm
@@ -890,6 +903,20 @@ class FlowLauncher:
         inputs = task_config.get('inputs', [])
         outputs = task_config.get('outputs', [])
         
+        # Ensure description is a string, not a list
+        if isinstance(description, list):
+            description = '\n'.join(str(item) for item in description)
+        elif not isinstance(description, str):
+            description = str(description)
+        
+        # Ensure inputs and outputs are lists of strings
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        if isinstance(outputs, str):
+            outputs = [outputs]
+        inputs = [str(item) for item in inputs] if inputs else []
+        outputs = [str(item) for item in outputs] if outputs else []
+        
         # Get the agent for this task
         agent = self.agents.get(agent_name)
         if not agent:
@@ -897,6 +924,14 @@ class FlowLauncher:
         
         # Build expected output description from outputs
         expected_output = f"Task should produce: {', '.join(outputs)}" if outputs else "Task completion"
+        
+        # Ensure expected_output is a string
+        if not isinstance(expected_output, str):
+            expected_output = str(expected_output)
+        
+        # Extra validation: ensure all string parameters are actually strings
+        description = str(description) if not isinstance(description, str) else description
+        expected_output = str(expected_output) if not isinstance(expected_output, str) else expected_output
         
         task = Task(
             description=description,
@@ -1011,7 +1046,7 @@ class FlowLauncher:
         crew = Crew(
             agents=list(self.agents.values()),
             tasks=task_list,
-            verbose=True,
+            verbose=self.verbose,
             process=Process.sequential  # Default to sequential based on workflow
         )
         
@@ -1109,9 +1144,12 @@ def run_command(flow_file, whatif, no_validate, project_path, project_id, custom
       
       # Custom input variables
       python launch_flow.py run improve-project-flow.yml -I custom_var=value -I another=123
+      
+      # Enable verbose agent output
+      python launch_flow.py run improve-project-flow.yml --verbose
     """
     try:
-        launcher = FlowLauncher(flow_file, whatif=whatif)
+        launcher = FlowLauncher(flow_file, whatif=whatif, verbose=verbose)
         
         mode_str = "WHATIF MODE" if whatif else "EXECUTION MODE"
         print("="*60)
