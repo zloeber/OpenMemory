@@ -6,10 +6,10 @@ description: >
 
 env:
   CONTEXT7_API_KEY: "{$env:CONTEXT7_API_KEY}"
-  MCP_SHELL_SEC_CONFIG_FILE: "shell-security.yml"
-  MCP_SHELL_SECURITY_ENABLED: "true"
-  MCP_SHELL_LOG_LEVEL: "info"
-  MCP_SHELL_LOG_FORMAT: "json"
+  # MCP_SHELL_SEC_CONFIG_FILE: "shell-security.yml"
+  # MCP_SHELL_SECURITY_ENABLED: "true"
+  # MCP_SHELL_LOG_LEVEL: "info"
+  # MCP_SHELL_LOG_FORMAT: "json"
 
 mcps:
   - name: "sequential-thinking"
@@ -20,17 +20,17 @@ mcps:
   - name: "server-filesystem"
     args: [ "npx",  "-y", "@modelcontextprotocol/server-filesystem", "." ]
     type: "stdio"
-  - name: "shell"
-    description: >
-      A shell MCP that executes shell commands with security restrictions.
-    type: "stdio"
-    args: [ "docker",  "run", "--rm", "-i", "mcp-shell:latest" ]
-    env: {
-      "MCP_SHELL_SEC_CONFIG_FILE": "shell-security.yml",
-      "MCP_SHELL_SECURITY_ENABLED": "true",
-      "MCP_SHELL_LOG_LEVEL": "info",
-      "MCP_SHELL_LOG_FORMAT": "json"
-    }
+  # - name: "shell"
+  #   description: >
+  #     A shell MCP that executes shell commands with security restrictions.
+  #   type: "stdio"
+  #   args: [ "docker",  "run", "--rm", "-i", "mcp-shell:latest" ]
+  #   env: {
+  #     "MCP_SHELL_SEC_CONFIG_FILE": "shell-security.yml",
+  #     "MCP_SHELL_SECURITY_ENABLED": "true",
+  #     "MCP_SHELL_LOG_LEVEL": "info",
+  #     "MCP_SHELL_LOG_FORMAT": "json"
+  #   }
   - name: "searxng"
     description: >
       A web search MCP using SearxNG as the backend search engine.
@@ -45,10 +45,9 @@ mcps:
     type: "http"
     url: "http://localhost:8080/mcp-proxy"
   - name: "mcp-feedback-enhanced"
-    description: >
-      An MCP that collects multi-choice feedback with enhanced options for agent decision-making.
-    args: [ "npx",  "-y", "mcp-feedback-enhanced" ]
-    type: "stdio"
+    description: An MCP that collects multi-choice feedback with enhanced options for agent decision-making.
+    type: "http"
+    url: "http://localhost:9000/mcp"
   - name: "context7"
     description: >
       An MCP that connects to the Context7 platform for advanced and up to date library and frameworks documentation.
@@ -64,15 +63,15 @@ mcps:
       }
     }
   - name: "git"
-    description: >
-      An MCP that provides git version control operations.
+    description: An MCP that provides git version control operations.
     type: "stdio"
-    args: [ "npx",  "-y", "mcp-server-git" ]
-  - name: "github"
-    description: >
-      An MCP that provides GitHub repository operations.
-    type: "http"
-    url: "http://localhost:8080/mcp-github-proxy"
+    args: [ "uvx",  "mcp-server-git" ]
+  # - name: "github"
+  #   description: >
+  #     An MCP that provides GitHub repository operations.
+  #   type: "http"
+  #   url: "http://localhost:8080/mcp-github-proxy"
+
 inputs:
   - name: project_path
     description: "The root path of the project to be improved"
@@ -96,8 +95,6 @@ tools:
     description: "Executes a text instruction sourced from an AGENTS.md file"
   - name: sequentialthinking
     description: "Breaks down complex tasks into smaller sequential steps"
-  - name: mcp_enhanced_feedback
-    description: "Requests multi-choice feedback with enhanced options for agent decisions"
   - name: write_file
     description: "Writes content to a file at a specified path"
   - name: create_directory
@@ -143,6 +140,7 @@ agents:
 
   lead_agent:
     role: "Lead Project Strategist"
+    allow_delegation: true
     goal: >
       Maintain the global project model, identify improvements, and hand off
       selected spec based prompt to the developer agent to fulfill.
@@ -172,7 +170,7 @@ agents:
       - Moving forward, always update the project model in memory after significant evaluations or changes. Use git commit hash to
         determine if a model refresh is needed.
       - Look for 3 improvement ideas for the project using memory and AGENTS.md context. 
-      - Present and request approval using enhanced_feedback.
+      - Present and request approval using interactive_feedback.
       - Upon selection, use sequentialthinking to create a spec based prompt for the developer agent to follow.
       - Store project model (semantic), reasoning (reflective), and unusual events (episodic). Store other relevant info as needed.
       - Handoff to developer: selected_improvement, project_model, agent_instructions, target_path.
@@ -282,7 +280,7 @@ llms:
   - name: ollama
     provider: "ollama"
     base_url: "http://linbox5:11434"
-    model: "qwen3-coder:30b"
+    model: "gpt-oss:latest"
     temperature: 0.2
     max_tokens: 4000
     top_p: 0.9

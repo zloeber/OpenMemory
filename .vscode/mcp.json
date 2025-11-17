@@ -42,6 +42,11 @@
     "mcp-feedback-enhanced": {
       "url": "http://localhost:9000/mcp",
       "type": "http",
+    },
+    "mcp-server-git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"],
+      "type": "stdio"
     }
   },
   "inputs": []
