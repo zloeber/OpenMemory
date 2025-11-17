@@ -78,10 +78,10 @@ inputs:
     description: "The root path of the project to be improved"
     type: string
     default: "."
-  - project_id:
-      description: "Unique identifier for the project"
-      type: string
-      default: "my_project"
+  - name: project_id
+    description: "Unique identifier for the project"
+    type: string
+    default: "my_project"
 
 tools:
   - name: get_memory
@@ -143,23 +143,22 @@ agents:
 
   lead_agent:
     role: "Lead Project Strategist"
-    memory_namespace: {project_id}
     goal: >
       Maintain the global project model, identify improvements, and hand off
-      selected tasks with directory-appropriate AGENTS.md instructions.
+      selected spec based prompt to the developer agent to fulfill.
 
     instructions: |
-      You work based on:
-      - Shared project memory ({project_id})
-      - AGENTS.md files found in the target path and its parent directories
-
-      **AGENTS.md Path Resolution (non-recursive):**
-      - Determine the target path based on the improvement area.
-      - Check for AGENTS.md in the target directory and all parent directories up to repo root.
-      - Use `file_exists` and `read_file` to load relevant instructions.
-      - Merge instructions into a single actionable set.
+      When evaluating improvement areas, you must consider AGENTS.md instructions
+      that are relevant to the target path of the improvement. AGENTS.md files
+      may exist at various levels in the project directory structure. You should
+      look for AGENTS.md files in the target path and its parent directories. 
 
       **Memory Usage Guidelines:**
+      You have an active memory context that should be utilized to maintain
+      and update the project model, identify improvement areas, and create
+      detailed spec based prompts for the developer agent to follow. 
+      Your memory namespace is {project_id}. Use the following guidelines for each memory type:
+
       - **Semantic Memory**: project model, architectural knowledge, coding conventions.
       - **Episodic Memory**: surprising events, prior failed attempts, unique occurrences.
       - **Procedural Memory**: workflows, steps, processes (if applicable for project model updates).
@@ -168,14 +167,14 @@ agents:
       - **Temporal Memory**: track changes over time, noting when specific implementations were made and their context.
 
       **Workflow:**
-      - Retrieve project model from memory.
-      - If missing or outdated, generate or update it using AGENTS.md instructions.
+      Follow this workflow to evaluate and select improvements for the project in {project_path}:
+      - Retrieve model of project from memory. If not present, initialize it by analyzing the project structure and key files.
+      - Moving forward, always update the project model in memory after significant evaluations or changes. Use git commit hash to
+        determine if a model refresh is needed.
       - Look for 3 improvement ideas for the project using memory and AGENTS.md context. 
       - Present and request approval using enhanced_feedback.
-      - Upon selection, identify target path for improvement.
-      - Use sequentialthinking to create the spec based prompt for the developer agent to follow.
-      - Store project model (semantic), reasoning (reflective), and unusual events (episodic).
-      - 
+      - Upon selection, use sequentialthinking to create a spec based prompt for the developer agent to follow.
+      - Store project model (semantic), reasoning (reflective), and unusual events (episodic). Store other relevant info as needed.
       - Handoff to developer: selected_improvement, project_model, agent_instructions, target_path.
 
     tasks:
@@ -192,7 +191,6 @@ agents:
 
   developer_agent:
     role: "Implementation Engineer"
-    memory_namespace: {project_id}
     goal: >
       Implement (agent_instructions) according to AGENTS.md instructions relevant to the (target_path). 
 
@@ -229,7 +227,6 @@ agents:
 
   qa_agent:
     role: "Quality Assurance Analyst"
-    memory_namespace: {project_id}
     goal: >
       Validate the patch using AGENTS.md testing procedures relevant to the target path.
 
