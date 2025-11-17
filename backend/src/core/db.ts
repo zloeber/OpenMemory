@@ -47,23 +47,13 @@ type q_type = {
     ins_user: { run: (...p: any[]) => Promise<void> };
     get_user: { get: (user_id: string) => Promise<any> };
     upd_user_summary: { run: (...p: any[]) => Promise<void> };
-    // Agent registration queries
-    ins_agent: { run: (...p: any[]) => Promise<void> };
-    upd_agent: { run: (...p: any[]) => Promise<void> };
-    del_agent: { run: (agent_id: string) => Promise<void> };
-    get_agent: { get: (agent_id: string) => Promise<any> };
-    all_agents: { all: () => Promise<any[]> };
-    upd_agent_access: { run: (agent_id: string, timestamp: number) => Promise<void> };
-    deactivate_agent: { run: (agent_id: string, timestamp: number) => Promise<void> };
+    // Namespace queries (simplified - no agent dependencies)
     ins_namespace: { run: (...p: any[]) => Promise<void> };
     upd_namespace: { run: (...p: any[]) => Promise<void> };
     del_namespace: { run: (namespace: string) => Promise<void> };
     get_namespace: { get: (namespace: string) => Promise<any> };
     all_namespaces: { all: () => Promise<any[]> };
-    clear_namespace_creator: { run: (agent_id: string) => Promise<void> };
     deactivate_namespace: { run: (namespace: string, timestamp: number) => Promise<void> };
-    ins_access_log: { run: (...p: any[]) => Promise<void> };
-    get_agent_access_log: { all: (agent_id: string, limit?: number) => Promise<any[]> };
 };
 
 let run_async: (sql: string, p?: any[]) => Promise<void>;
@@ -445,58 +435,10 @@ if (is_pg) {
                 ),
         },
         // Agent registration queries for PostgreSQL
-        ins_agent: {
-            run: (...p) =>
-                run_async(
-                    `insert into "${sc}"."agent_registrations"(agent_id,namespace,permissions,description,registration_date,last_access,active) values($1,$2,$3,$4,$5,$6,$7) on conflict(agent_id) do update set namespace=excluded.namespace,permissions=excluded.permissions,description=excluded.description,last_access=excluded.last_access,active=excluded.active`,
-                    p,
-                ),
-        },
-        upd_agent: {
-            run: (...p) =>
-                run_async(
-                    `update "${sc}"."agent_registrations" set namespace=$2,permissions=$3,description=$4,last_access=$5 where agent_id=$1`,
-                    p,
-                ),
-        },
-        del_agent: {
-            run: (agent_id) =>
-                run_async(
-                    `delete from "${sc}"."agent_registrations" where agent_id=$1`,
-                    [agent_id],
-                ),
-        },
-        get_agent: {
-            get: (agent_id) =>
-                get_async(
-                    `select * from "${sc}"."agent_registrations" where agent_id=$1 and active=1`,
-                    [agent_id],
-                ),
-        },
-        all_agents: {
-            all: () =>
-                all_async(
-                    `select * from "${sc}"."agent_registrations" where active=1 order by registration_date desc`,
-                ),
-        },
-        upd_agent_access: {
-            run: (agent_id, timestamp) =>
-                run_async(
-                    `update "${sc}"."agent_registrations" set last_access=$2 where agent_id=$1`,
-                    [agent_id, timestamp],
-                ),
-        },
-        deactivate_agent: {
-            run: (agent_id, timestamp) =>
-                run_async(
-                    `update "${sc}"."agent_registrations" set active=0,last_access=$2 where agent_id=$1`,
-                    [agent_id, timestamp],
-                ),
-        },
         ins_namespace: {
             run: (...p) =>
                 run_async(
-                    `insert into "${sc}"."namespace_groups"(namespace,description,created_by,created_at,updated_at,active) values($1,$2,$3,$4,$5,$6) on conflict(namespace) do update set description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
+                    `insert into "${sc}"."namespace_groups"(namespace,description,created_at,updated_at,active) values($1,$2,$3,$4,$5) on conflict(namespace) do update set description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
                     p,
                 ),
         },
@@ -527,32 +469,11 @@ if (is_pg) {
                     `select * from "${sc}"."namespace_groups" where active=1 order by created_at desc`,
                 ),
         },
-        clear_namespace_creator: {
-            run: (agent_id) =>
-                run_async(
-                    `update "${sc}"."namespace_groups" set created_by=NULL where created_by=$1`,
-                    [agent_id],
-                ),
-        },
         deactivate_namespace: {
             run: (namespace, timestamp) =>
                 run_async(
                     `update "${sc}"."namespace_groups" set active=0,updated_at=$2 where namespace=$1`,
                     [namespace, timestamp],
-                ),
-        },
-        ins_access_log: {
-            run: (...p) =>
-                run_async(
-                    `insert into "${sc}"."agent_access_log"(agent_id,operation,namespace,timestamp,success,error_message) values($1,$2,$3,$4,$5,$6)`,
-                    p,
-                ),
-        },
-        get_agent_access_log: {
-            all: (agent_id: string, limit = 10) =>
-                all_async(
-                    `select * from "${sc}"."agent_access_log" where agent_id=$1 order by timestamp desc limit $2`,
-                    [agent_id, limit],
                 ),
         },
     };
@@ -886,45 +807,11 @@ if (is_pg) {
                     p,
                 ),
         },
-        // Agent registration queries for SQLite
-        ins_agent: {
-            run: (...p) =>
-                exec(
-                    "insert or replace into agent_registrations(agent_id,namespace,permissions,description,registration_date,last_access,active) values(?,?,?,?,?,?,?)",
-                    p,
-                ),
-        },
-        upd_agent: {
-            run: (...p) =>
-                exec(
-                    "update agent_registrations set namespace=?,permissions=?,description=?,last_access=? where agent_id=?",
-                    p,
-                ),
-        },
-        del_agent: {
-            run: (agent_id) =>
-                exec("delete from agent_registrations where agent_id=?", [agent_id]),
-        },
-        get_agent: {
-            get: (agent_id) =>
-                one("select * from agent_registrations where agent_id=? and active=1", [agent_id]),
-        },
-        all_agents: {
-            all: () =>
-                many("select * from agent_registrations where active=1 order by registration_date desc"),
-        },
-        upd_agent_access: {
-            run: (agent_id, timestamp) =>
-                exec("update agent_registrations set last_access=? where agent_id=?", [timestamp, agent_id]),
-        },
-        deactivate_agent: {
-            run: (agent_id, timestamp) =>
-                exec("update agent_registrations set active=0,last_access=? where agent_id=?", [timestamp, agent_id]),
-        },
+        // Namespace queries for SQLite (simplified - no agent dependencies)
         ins_namespace: {
             run: (...p) =>
                 exec(
-                    "insert or replace into namespace_groups(namespace,description,created_by,created_at,updated_at,active) values(?,?,?,?,?,?)",
+                    "insert or replace into namespace_groups(namespace,description,created_at,updated_at,active) values(?,?,?,?,?)",
                     p,
                 ),
         },
@@ -947,27 +834,9 @@ if (is_pg) {
             all: () =>
                 many("select * from namespace_groups where active=1 order by created_at desc"),
         },
-        clear_namespace_creator: {
-            run: (agent_id) =>
-                exec("update namespace_groups set created_by=NULL where created_by=?", [agent_id]),
-        },
         deactivate_namespace: {
             run: (namespace, timestamp) =>
                 exec("update namespace_groups set active=0,updated_at=? where namespace=?", [timestamp, namespace]),
-        },
-        ins_access_log: {
-            run: (...p) =>
-                exec(
-                    "insert into agent_access_log(agent_id,operation,namespace,timestamp,success,error_message) values(?,?,?,?,?,?)",
-                    p,
-                ),
-        },
-        get_agent_access_log: {
-            all: (agent_id, limit = 10) =>
-                many(
-                    "select * from agent_access_log where agent_id=? order by timestamp desc limit ?",
-                    [agent_id, limit],
-                ),
         },
     };
 }
