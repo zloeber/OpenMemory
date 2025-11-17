@@ -58,8 +58,9 @@ async function startProxyServer() {
         app.get("/", (req: any, res: any) => {
             res.json({
                 service: "OpenMemory MCP Proxy",
+                mode: "standalone-proxy",
                 version: "1.0.0",
-                description: "Multi-agent namespace-aware MCP proxy for OpenMemory",
+                description: "Multi-agent namespace-aware MCP proxy for OpenMemory (Standalone Proxy Server)",
                 endpoints: {
                     mcp: "/mcp-proxy",
                     agents: "/api/agents", 

@@ -65,8 +65,7 @@ agent = OpenMemoryAgent(
     agent_id="my-research-assistant",
     namespace="research-workspace",
     description="AI research assistant for paper analysis",
-    permissions=["read", "write"],
-    shared_namespaces=["team-knowledge", "public-papers"]
+    permissions=["read", "write"]
 )
 
 # Agent automatically gets an API key and isolated namespace
@@ -117,8 +116,7 @@ agent = OpenMemoryAgent(
     agent_id="research-assistant-v2",
     namespace="research-workspace",
     description="AI research assistant",
-    permissions=["read", "write"],
-    shared_namespaces=["public-papers", "team-knowledge"]
+    permissions=["read", "write"]
 )
 
 print(f"API Key: {agent.api_key}")
@@ -199,32 +197,29 @@ print(f"Suggested namespace: {suggestion}")
 ### Multi-Agent Collaboration
 
 ```python
-# Create multiple agents with shared access
+# Create multiple agents with separate namespaces (isolated)
 researcher = OpenMemoryAgent(
     agent_id="researcher-alice",
-    namespace="alice-research",
-    shared_namespaces=["team-project", "public-data"]
+    namespace="alice-research"
 )
 
 analyst = OpenMemoryAgent(
     agent_id="analyst-bob", 
-    namespace="bob-analysis",
-    shared_namespaces=["team-project", "research-reports"]
+    namespace="bob-analysis"
 )
 
-# Researcher shares findings
+# Researcher stores findings in their namespace
 researcher.store_memory(
     content="New algorithm shows 25% improvement in accuracy",
-    namespace="team-project",  # shared space
     sector="semantic"
 )
 
-# Analyst accesses shared knowledge
+# Analyst can only access their own namespace
 findings = analyst.query_memory(
     query="algorithm improvement accuracy",
-    namespace="team-project",
     k=5
 )
+# Note: analyst won't see researcher's data - namespaces are isolated
 ```
 
 ### Agent Management
@@ -267,7 +262,6 @@ OpenMemoryAgent(
     api_key: str | None = None,
     namespace: str | None = None,
     permissions: List[str] | None = None,
-    shared_namespaces: List[str] | None = None,
     description: str | None = None,
     auto_register: bool = True
 )

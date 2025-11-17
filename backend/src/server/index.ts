@@ -3,7 +3,7 @@ import { env, tier } from "../core/cfg";
 import { run_decay_process, prune_weak_waypoints } from "../memory/hsg";
 import { mcp } from "../ai/mcp";
 import { routes } from "./routes";
-import { proxy_routes } from "./proxy";
+import { proxy_routes, proxy_only_mode_middleware } from "./proxy";
 import {
     authenticate_api_request,
     log_authenticated_request,
@@ -78,9 +78,18 @@ async function initializeServer() {
         app.use(log_authenticated_request);
     }
 
-    routes(app);
+    // Apply proxy-only mode middleware early to block non-proxy routes if enabled
+    if (env.proxy_only_mode) {
+        app.use(proxy_only_mode_middleware);
+    }
 
-    mcp(app);
+    // When proxy_only_mode is enabled, only setup proxy routes
+    if (env.proxy_only_mode) {
+        console.log("[CONFIG] Proxy-Only Mode: ENABLED - Standard API routes disabled");
+    } else {
+        routes(app);
+        mcp(app);
+    }
 
     // Setup proxy routes if enabled
     if (proxyEnabled) {
@@ -88,7 +97,8 @@ async function initializeServer() {
         
         proxy_routes(app);
         
-        console.log("[OpenMemory] MCP Proxy service initialized on port", env.port);
+        const modeLabel = env.proxy_only_mode ? "MCP Proxy service (PROXY-ONLY MODE)" : "MCP Proxy service";
+        console.log(`[OpenMemory] ${modeLabel} initialized on port`, env.port);
         console.log("[OpenMemory] Proxy endpoints:");
         console.log("  POST /mcp-proxy - MCP protocol endpoint");
         console.log("  GET /api/agents - List registered agents");
@@ -97,6 +107,10 @@ async function initializeServer() {
         console.log("  GET /api/proxy-info - Service information");
         console.log("  GET /api/registration-template/:format - Registration templates");
         console.log("  GET /api/proxy-health - Health check");
+        
+        if (env.proxy_only_mode) {
+            console.log("[CONFIG] Standard OpenMemory API endpoints are DISABLED in proxy-only mode");
+        }
     } else {
         console.log("[MCP PROXY] Proxy service disabled");
     }

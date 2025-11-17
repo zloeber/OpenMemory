@@ -52,7 +52,6 @@ type q_type = {
     upd_agent: { run: (...p: any[]) => Promise<void> };
     del_agent: { run: (agent_id: string) => Promise<void> };
     get_agent: { get: (agent_id: string) => Promise<any> };
-    get_agent_by_api_key: { get: (api_key: string) => Promise<any> };
     all_agents: { all: () => Promise<any[]> };
     upd_agent_access: { run: (agent_id: string, timestamp: number) => Promise<void> };
     deactivate_agent: { run: (agent_id: string, timestamp: number) => Promise<void> };
@@ -449,14 +448,14 @@ if (is_pg) {
         ins_agent: {
             run: (...p) =>
                 run_async(
-                    `insert into "${sc}"."agent_registrations"(agent_id,namespace,permissions,shared_namespaces,api_key,description,registration_date,last_access,active) values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(agent_id) do update set namespace=excluded.namespace,permissions=excluded.permissions,shared_namespaces=excluded.shared_namespaces,api_key=excluded.api_key,description=excluded.description,last_access=excluded.last_access,active=excluded.active`,
+                    `insert into "${sc}"."agent_registrations"(agent_id,namespace,permissions,description,registration_date,last_access,active) values($1,$2,$3,$4,$5,$6,$7) on conflict(agent_id) do update set namespace=excluded.namespace,permissions=excluded.permissions,description=excluded.description,last_access=excluded.last_access,active=excluded.active`,
                     p,
                 ),
         },
         upd_agent: {
             run: (...p) =>
                 run_async(
-                    `update "${sc}"."agent_registrations" set namespace=$2,permissions=$3,shared_namespaces=$4,description=$5,last_access=$6 where agent_id=$1`,
+                    `update "${sc}"."agent_registrations" set namespace=$2,permissions=$3,description=$4,last_access=$5 where agent_id=$1`,
                     p,
                 ),
         },
@@ -472,13 +471,6 @@ if (is_pg) {
                 get_async(
                     `select * from "${sc}"."agent_registrations" where agent_id=$1 and active=1`,
                     [agent_id],
-                ),
-        },
-        get_agent_by_api_key: {
-            get: (api_key) =>
-                get_async(
-                    `select * from "${sc}"."agent_registrations" where api_key=$1 and active=1`,
-                    [api_key],
                 ),
         },
         all_agents: {
@@ -898,14 +890,14 @@ if (is_pg) {
         ins_agent: {
             run: (...p) =>
                 exec(
-                    "insert or replace into agent_registrations(agent_id,namespace,permissions,shared_namespaces,api_key,description,registration_date,last_access,active) values(?,?,?,?,?,?,?,?,?)",
+                    "insert or replace into agent_registrations(agent_id,namespace,permissions,description,registration_date,last_access,active) values(?,?,?,?,?,?,?)",
                     p,
                 ),
         },
         upd_agent: {
             run: (...p) =>
                 exec(
-                    "update agent_registrations set namespace=?,permissions=?,shared_namespaces=?,description=?,last_access=? where agent_id=?",
+                    "update agent_registrations set namespace=?,permissions=?,description=?,last_access=? where agent_id=?",
                     p,
                 ),
         },
@@ -916,10 +908,6 @@ if (is_pg) {
         get_agent: {
             get: (agent_id) =>
                 one("select * from agent_registrations where agent_id=? and active=1", [agent_id]),
-        },
-        get_agent_by_api_key: {
-            get: (api_key) =>
-                one("select * from agent_registrations where api_key=? and active=1", [api_key]),
         },
         all_agents: {
             all: () =>

@@ -7,7 +7,6 @@ type AgentRecord = {
     agent_id: string
     namespace: string
     permissions: string[]
-    shared_namespaces: string[]
     description?: string
     registration_date: string
     last_access: string
@@ -20,7 +19,6 @@ type NamespaceSummary = {
     created_at: string
     updated_at: string
     primary_agent_count: number
-    shared_agent_count: number
 }
 
 type NamespaceTotals = {
@@ -33,7 +31,6 @@ type AgentFormValues = {
     agent_id: string
     namespace: string
     permissions: string[]
-    shared_namespaces: string
     description: string
 }
 
@@ -115,10 +112,6 @@ export default function AgentsPage() {
                     agent_id: values.agent_id,
                     namespace: values.namespace,
                     permissions: values.permissions,
-                    shared_namespaces: values.shared_namespaces
-                        .split(/[\n,]/)
-                        .map((v) => v.trim())
-                        .filter(Boolean),
                     description: values.description.trim(),
                 }),
             })
@@ -287,8 +280,7 @@ export default function AgentsPage() {
                         <thead className="bg-stone-900/60 text-stone-400">
                             <tr>
                                 <th className="text-left px-4 py-3">Namespace</th>
-                                <th className="text-left px-4 py-3">Primary Agents</th>
-                                <th className="text-left px-4 py-3">Shared Access</th>
+                                <th className="text-left px-4 py-3">Agents</th>
                                 <th className="text-left px-4 py-3">Description</th>
                                 <th className="text-left px-4 py-3">Updated</th>
                                 <th className="px-4 py-3 text-right">Actions</th>
@@ -297,7 +289,7 @@ export default function AgentsPage() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-6 text-center text-stone-500">
+                                    <td colSpan={5} className="px-4 py-6 text-center text-stone-500">
                                         Loading namespaces...
                                     </td>
                                 </tr>
@@ -312,7 +304,6 @@ export default function AgentsPage() {
                                     <tr key={ns.namespace} className="border-t border-stone-900/60">
                                         <td className="px-4 py-3 text-stone-200 font-medium">{ns.namespace}</td>
                                         <td className="px-4 py-3 text-stone-300">{ns.primary_agent_count}</td>
-                                        <td className="px-4 py-3 text-stone-300">{ns.shared_agent_count}</td>
                                         <td className="px-4 py-3 text-stone-400 max-w-[260px] break-words">{ns.description || "—"}</td>
                                         <td className="px-4 py-3 text-stone-400">{new Date(ns.updated_at).toLocaleString()}</td>
                                         <td className="px-4 py-3 text-right">
@@ -355,7 +346,7 @@ export default function AgentsPage() {
                                 <th className="text-left px-4 py-3">Agent</th>
                                 <th className="text-left px-4 py-3">Namespace</th>
                                 <th className="text-left px-4 py-3">Permissions</th>
-                                <th className="text-left px-4 py-3">Shared Namespaces</th>
+                                <th className="text-left px-4 py-3">Description</th>
                                 <th className="text-left px-4 py-3">Last Access</th>
                                 <th className="px-4 py-3 text-right">Actions</th>
                             </tr>
@@ -386,7 +377,7 @@ export default function AgentsPage() {
                                             {agent.permissions.join(", ")}
                                         </td>
                                         <td className="px-4 py-3 text-stone-400 max-w-[260px] break-words">
-                                            {agent.shared_namespaces.length > 0 ? agent.shared_namespaces.join(", ") : "—"}
+                                            {agent.description || "—"}
                                         </td>
                                         <td className="px-4 py-3 text-stone-400">{new Date(agent.last_access).toLocaleString()}</td>
                                         <td className="px-4 py-3 text-right">
@@ -486,9 +477,6 @@ function AgentModal({
         const base = initial?.permissions || ["read", "write"]
         return Array.from(new Set([...base, "read"]))
     })
-    const [sharedNamespaces, setSharedNamespaces] = useState(
-        initial?.shared_namespaces.join(", ") || ""
-    )
     const [description, setDescription] = useState(initial?.description || "")
     const [saving, setSaving] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
@@ -522,7 +510,6 @@ function AgentModal({
                 agent_id: agentId.trim(),
                 namespace: namespace.trim(),
                 permissions,
-                shared_namespaces: sharedNamespaces,
                 description,
             })
         } catch (error: any) {
@@ -588,15 +575,6 @@ function AgentModal({
                             ))}
                         </div>
                         <p className="mt-2 text-xs text-stone-500">Read access is required for all agents.</p>
-                    </div>
-                    <div>
-                        <label className="block text-sm text-stone-400 mb-1">Shared Namespaces</label>
-                        <textarea
-                            value={sharedNamespaces}
-                            onChange={(e) => setSharedNamespaces(e.target.value)}
-                            className="w-full min-h-20 rounded-lg border border-stone-800 bg-stone-950 p-2 text-stone-200"
-                            placeholder="Comma separated list"
-                        />
                     </div>
                     <div>
                         <label className="block text-sm text-stone-400 mb-1">Description</label>

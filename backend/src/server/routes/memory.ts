@@ -8,6 +8,7 @@ import {
 } from "../../memory/hsg";
 import { ingestDocument, ingestURL } from "../../ops/ingest";
 import { env } from "../../core/cfg";
+import { VectorRepositoryFactory } from "../../repositories/VectorRepositoryFactory";
 import { update_user_summary } from "../../memory/user_summary";
 import type {
     add_req,
@@ -223,7 +224,11 @@ export function mem(app: any) {
             }
 
             await q.del_mem.run(id);
-            await q.del_vec.run(id);
+            
+            // Use vector repository for namespace-isolated deletion
+            const vectorRepo = await VectorRepositoryFactory.getInstance();
+            await vectorRepo.delete(id, undefined, m.user_id);
+            
             await q.del_waypoints.run(id, id);
             res.json({ ok: true });
         } catch (e: any) {

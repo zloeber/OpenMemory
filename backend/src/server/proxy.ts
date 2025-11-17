@@ -3,6 +3,48 @@ import { create_proxy_srv } from "../ai/mcp-proxy";
 import { env } from "../core/cfg";
 import { q } from "../core/db";
 
+/**
+ * Middleware to enforce proxy-only mode
+ * Blocks requests to non-proxy endpoints when OM_PROXY_ONLY_MODE is enabled
+ */
+export const proxy_only_mode_middleware = (req: any, res: any, next: any) => {
+    if (!env.proxy_only_mode) {
+        return next();
+    }
+    
+    const path = req.path || req.url;
+    
+    // Allow proxy endpoints, Swagger, dashboard, and system endpoints
+    const allowedPaths = [
+        '/mcp-proxy',
+        '/api/agents',
+        '/api/namespaces',
+        '/api/proxy-info',
+        '/api/registration-template',
+        '/api/proxy-health',
+        '/api-docs',
+        '/swagger',
+        '/health',
+        '/sectors',
+        '/dashboard',
+        '/'
+    ];
+    
+    // Check if path starts with any allowed path
+    const isAllowed = allowedPaths.some(allowed => path.startsWith(allowed));
+    
+    if (isAllowed) {
+        return next();
+    }
+    
+    // Block all other routes in proxy-only mode
+    res.status(403).json({
+        error: "Forbidden",
+        message: "This endpoint is not available in proxy-only mode. Only MCP proxy, agent management, and monitoring endpoints are accessible.",
+        available_endpoints: allowedPaths
+    });
+};
+
 // Global proxy instance
 let proxyInstance: ReturnType<typeof create_proxy_srv> | null = null;
 
@@ -112,7 +154,7 @@ export const proxy_routes = (app: any) => {
 
     app.post("/api/agents", async (req: any, res: any) => {
         try {
-            const { agent_id, namespace, permissions = ['read', 'write'], shared_namespaces = [], description = '' } = req.body;
+            const { agent_id, namespace, permissions = ['read', 'write'], description = '' } = req.body;
 
             // Validate required fields
             if (!agent_id || !namespace) {
@@ -134,33 +176,29 @@ export const proxy_routes = (app: any) => {
             const existingAgent = await q.get_agent.get(agent_id);
             const now = Math.floor(Date.now() / 1000);
             
-            let api_key: string;
             let operation: string;
             let message: string;
 
             if (existingAgent) {
                 // Update existing agent (idempotent operation)
-                api_key = existingAgent.api_key; // Keep existing API key
                 operation = 'update';
                 message = `Agent '${agent_id}' updated successfully`;
 
                 // Database query parameter order differs between PostgreSQL and SQLite
                 if (env.metadata_backend === 'postgres') {
-                    // PostgreSQL: agent_id, namespace, permissions, shared_namespaces, description, last_access
+                    // PostgreSQL: agent_id, namespace, permissions, description, last_access
                     await q.upd_agent.run(
                         agent_id,
                         namespace,
                         JSON.stringify(permissions),
-                        JSON.stringify(shared_namespaces),
                         description,
                         now
                     );
                 } else {
-                    // SQLite: namespace, permissions, shared_namespaces, description, last_access, agent_id
+                    // SQLite: namespace, permissions, description, last_access, agent_id
                     await q.upd_agent.run(
                         namespace,
                         JSON.stringify(permissions),
-                        JSON.stringify(shared_namespaces),
                         description,
                         now,
                         agent_id
@@ -168,8 +206,6 @@ export const proxy_routes = (app: any) => {
                 }
             } else {
                 // Create new agent
-                const generateApiKey = () => 'omp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-                api_key = generateApiKey();
                 operation = 'register';
                 message = `Agent '${agent_id}' registered successfully`;
 
@@ -177,8 +213,6 @@ export const proxy_routes = (app: any) => {
                     agent_id,
                     namespace,
                     JSON.stringify(permissions),
-                    JSON.stringify(shared_namespaces),
-                    api_key,
                     description,
                     now,  // registration_date
                     now,  // last_access
@@ -204,10 +238,8 @@ export const proxy_routes = (app: any) => {
             res.json({
                 success: true,
                 agent_id: agent_id,
-                api_key: api_key,
                 namespace: namespace,
                 permissions: permissions,
-                shared_namespaces: shared_namespaces,
                 description: description,
                 message: message
             });
@@ -297,7 +329,6 @@ export const proxy_routes = (app: any) => {
             ]);
 
             const primaryCounts = new Map<string, number>();
-            const sharedCounts = new Map<string, number>();
             const allNamespaceNames = new Set<string>();
 
             // Track all namespaces from the namespace_groups table
@@ -310,20 +341,6 @@ export const proxy_routes = (app: any) => {
                 const primaryNs = agent.namespace;
                 allNamespaceNames.add(primaryNs);
                 primaryCounts.set(primaryNs, (primaryCounts.get(primaryNs) || 0) + 1);
-
-                let sharedList: string[] = [];
-                try {
-                    sharedList = JSON.parse(agent.shared_namespaces || "[]");
-                    if (!Array.isArray(sharedList)) sharedList = [];
-                } catch (_err) {
-                    sharedList = [];
-                }
-
-                for (const shared of sharedList) {
-                    if (typeof shared !== "string") continue;
-                    allNamespaceNames.add(shared);
-                    sharedCounts.set(shared, (sharedCounts.get(shared) || 0) + 1);
-                }
             }
 
             // Create namespace lookup from database entries
@@ -342,7 +359,6 @@ export const proxy_routes = (app: any) => {
                     created_at: new Date(createdAtSeconds * 1000).toISOString(),
                     updated_at: new Date(updatedAtSeconds * 1000).toISOString(),
                     primary_agent_count: primaryCounts.get(namespaceName) || 0,
-                    shared_agent_count: sharedCounts.get(namespaceName) || 0,
                     active: ns?.active !== undefined ? ns.active === 1 || ns.active === true : true,
                 };
             });
@@ -352,7 +368,7 @@ export const proxy_routes = (app: any) => {
                 totals: {
                     totalNamespaces: summary.length,
                     totalAgents: agents.length,
-                    orphanedNamespaces: summary.filter((ns) => ns.primary_agent_count === 0 && ns.shared_agent_count === 0).length,
+                    orphanedNamespaces: summary.filter((ns) => ns.primary_agent_count === 0).length,
                 },
             });
         } catch (error) {
@@ -402,7 +418,6 @@ export const proxy_routes = (app: any) => {
             res.json({
                 success: true,
                 namespace,
-                group_type,
                 description,
                 created_by: creator,
                 created_at: new Date(createdAt * 1000).toISOString(),

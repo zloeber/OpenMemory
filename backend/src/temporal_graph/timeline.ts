@@ -5,11 +5,12 @@ import { TemporalFact, TimelineEntry } from './types'
 
 
 export const get_subject_timeline = async (
+    namespace: string,
     subject: string,
     predicate?: string
 ): Promise<TimelineEntry[]> => {
-    const conditions = ['subject = ?']
-    const params: any[] = [subject]
+    const conditions = ['namespace = ?', 'subject = ?']
+    const params: any[] = [namespace, subject]
 
     if (predicate) {
         conditions.push('predicate = ?')
@@ -55,12 +56,13 @@ export const get_subject_timeline = async (
 
 
 export const get_predicate_timeline = async (
+    namespace: string,
     predicate: string,
     from?: Date,
     to?: Date
 ): Promise<TimelineEntry[]> => {
-    const conditions = ['predicate = ?']
-    const params: any[] = [predicate]
+    const conditions = ['namespace = ?', 'predicate = ?']
+    const params: any[] = [namespace, predicate]
 
     if (from) {
         conditions.push('valid_from >= ?')
@@ -109,14 +111,15 @@ export const get_predicate_timeline = async (
 
 
 export const get_changes_in_window = async (
+    namespace: string,
     from: Date,
     to: Date,
     subject?: string
 ): Promise<TimelineEntry[]> => {
     const from_ts = from.getTime()
     const to_ts = to.getTime()
-    const conditions: string[] = []
-    const params: any[] = []
+    const conditions: string[] = ['namespace = ?']
+    const params: any[] = [namespace]
 
     if (subject) {
         conditions.push('subject = ?')
@@ -165,6 +168,7 @@ export const get_changes_in_window = async (
 
 
 export const compare_time_points = async (
+    namespace: string,
     subject: string,
     time1: Date,
     time2: Date
@@ -179,18 +183,18 @@ export const compare_time_points = async (
 
     // Get all facts for subject at both times
     const facts_t1 = await all_async(`
-        SELECT id, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata
+        SELECT id, namespace, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata
         FROM temporal_facts
-        WHERE subject = ?
+        WHERE namespace = ? AND subject = ?
         AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
-    `, [subject, t1_ts, t1_ts])
+    `, [namespace, subject, t1_ts, t1_ts])
 
     const facts_t2 = await all_async(`
-        SELECT id, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata
+        SELECT id, namespace, subject, predicate, object, valid_from, valid_to, confidence, last_updated, metadata
         FROM temporal_facts
-        WHERE subject = ?
+        WHERE namespace = ? AND subject = ?
         AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
-    `, [subject, t2_ts, t2_ts])
+    `, [namespace, subject, t2_ts, t2_ts])
 
     const map_t1 = new Map<string, any>()
     const map_t2 = new Map<string, any>()
@@ -235,6 +239,7 @@ export const compare_time_points = async (
 
 
 export const get_change_frequency = async (
+    namespace: string,
     subject: string,
     predicate: string,
     window_days: number = 30
@@ -250,10 +255,10 @@ export const get_change_frequency = async (
     const rows = await all_async(`
         SELECT valid_from, valid_to
         FROM temporal_facts
-        WHERE subject = ? AND predicate = ?
+        WHERE namespace = ? AND subject = ? AND predicate = ?
         AND valid_from >= ?
         ORDER BY valid_from ASC
-    `, [subject, predicate, window_start])
+    `, [namespace, subject, predicate, window_start])
 
     const total_changes = rows.length
     let total_duration = 0
@@ -279,6 +284,7 @@ export const get_change_frequency = async (
 
 
 export const get_volatile_facts = async (
+    namespace: string,
     subject?: string,
     limit: number = 10
 ): Promise<Array<{
@@ -287,8 +293,15 @@ export const get_volatile_facts = async (
     change_count: number
     avg_confidence: number
 }>> => {
-    const where = subject ? 'WHERE subject = ?' : ''
-    const params = subject ? [subject] : []
+    const conditions = ['namespace = ?']
+    const params = [namespace]
+    
+    if (subject) {
+        conditions.push('subject = ?')
+        params.push(subject)
+    }
+    
+    const where = `WHERE ${conditions.join(' AND ')}`
 
     const sql = `
         SELECT subject, predicate, COUNT(*) as change_count, AVG(confidence) as avg_confidence
@@ -307,6 +320,7 @@ export const get_volatile_facts = async (
 function row_to_fact(row: any): TemporalFact {
     return {
         id: row.id,
+        namespace: row.namespace,
         subject: row.subject,
         predicate: row.predicate,
         object: row.object,

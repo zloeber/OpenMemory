@@ -201,6 +201,28 @@ docker-compose up openmemory-mcp-proxy
 # - Proxy API: http://localhost:8081/api/proxy-info
 ```
 
+#### Proxy-Only Mode
+
+Run OpenMemory with only MCP proxy and agent management endpoints enabled:
+
+```bash
+# Set environment variable for proxy-only mode
+OM_PROXY_ONLY_MODE=true docker-compose up openmemory
+
+# Or add to .env file:
+# OM_PROXY_ONLY_MODE=true
+
+# In proxy-only mode:
+# - ✅ MCP proxy endpoints available
+# - ✅ Agent management endpoints available  
+# - ✅ Namespace management endpoints available
+# - ✅ Dashboard endpoints available
+# - ✅ Health and sectors endpoints available
+# - ❌ Standard memory API endpoints disabled
+```
+
+See [docs/PROXY_ONLY_MODE.md](./docs/PROXY_ONLY_MODE.md) for detailed documentation.
+
 ### Dashboard Setup
 
 The dashboard provides a web interface to visualize and manage your memories.

@@ -1,5 +1,6 @@
 export interface TemporalFact {
     id: string
+    namespace: string
     subject: string
     predicate: string
     object: string
@@ -12,6 +13,7 @@ export interface TemporalFact {
 
 export interface TemporalEdge {
     id: string
+    namespace: string
     source_id: string
     target_id: string
     relation_type: string
@@ -31,6 +33,7 @@ export interface TimelineEntry {
 }
 
 export interface TemporalQuery {
+    namespace?: string
     subject?: string
     predicate?: string
     object?: string

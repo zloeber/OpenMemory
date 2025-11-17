@@ -138,7 +138,6 @@ report.services.proxy_mcp.tools = [
             { name: "agent_id", type: "string", required: true, description: "Unique identifier for the agent" },
             { name: "namespace", type: "string", required: true, description: "Primary namespace for agent memories" },
             { name: "permissions", type: "array", required: false, default: ["read", "write"], description: "Permissions for the primary namespace", values: ["read", "write", "admin"] },
-            { name: "shared_namespaces", type: "array", required: false, description: "Additional namespaces this agent can access" },
             { name: "description", type: "string", required: false, description: "Agent description for documentation" }
         ],
         returns: "Registration confirmation with API key",
@@ -498,7 +497,6 @@ curl -X POST http://localhost:8080/mcp-proxy \\
         "agent_id": "research-bot-v1",
         "namespace": "research-data",
         "permissions": ["read", "write"],
-        "shared_namespaces": ["public-knowledge"],
         "description": "AI research assistant"
       }
     }

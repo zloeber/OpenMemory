@@ -7,7 +7,6 @@ interface Agent {
     agent_id: string
     namespace: string
     permissions: string[]
-    shared_namespaces: string[]
     description: string
     registration_date: string
     last_access: string
@@ -203,7 +202,7 @@ export default function AgentMemoryPage() {
     }
 
     const availableNamespaces = selectedAgent 
-        ? Array.from(new Set([selectedAgent.namespace, ...selectedAgent.shared_namespaces]))
+        ? [selectedAgent.namespace]
         : []
 
     return (
@@ -254,23 +253,11 @@ export default function AgentMemoryPage() {
                         {selectedAgent && (
                             <div className="mt-4 space-y-3">
                                 <div>
-                                    <div className="text-xs text-stone-500 mb-1">Primary Namespace</div>
+                                    <div className="text-xs text-stone-500 mb-1">Namespace</div>
                                     <div className="text-sm text-stone-300 font-mono bg-stone-900 rounded px-2 py-1">
                                         {selectedAgent.namespace}
                                     </div>
                                 </div>
-                                {selectedAgent.shared_namespaces.length > 0 && (
-                                    <div>
-                                        <div className="text-xs text-stone-500 mb-1">Shared Access</div>
-                                        <div className="text-sm text-stone-300 space-y-1">
-                                            {selectedAgent.shared_namespaces.map(ns => (
-                                                <div key={ns} className="font-mono bg-stone-900 rounded px-2 py-1">
-                                                    {ns}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                                 <div>
                                     <div className="text-xs text-stone-500 mb-1">Permissions</div>
                                     <div className="flex gap-1 flex-wrap">

@@ -18,7 +18,6 @@ class AgentRegistration:
     agent_id: str
     namespace: str
     permissions: List[str]
-    shared_namespaces: List[str]
     api_key: str
     description: Optional[str] = None
     registration_date: Optional[datetime] = None
@@ -39,7 +38,6 @@ class OpenMemoryAgent:
                  api_key: Optional[str] = None,
                  namespace: Optional[str] = None,
                  permissions: Optional[List[str]] = None,
-                 shared_namespaces: Optional[List[str]] = None,
                  description: Optional[str] = None,
                  auto_register: bool = True):
         """
@@ -51,7 +49,6 @@ class OpenMemoryAgent:
             api_key: Existing API key (if already registered)
             namespace: Primary namespace for agent memories
             permissions: Agent permissions ['read', 'write', 'admin']
-            shared_namespaces: Additional namespaces this agent can access
             description: Human-readable description of agent purpose
             auto_register: Automatically register agent if not provided api_key
         """
@@ -60,7 +57,6 @@ class OpenMemoryAgent:
         self.api_key = api_key
         self.namespace = namespace or f"{agent_id}-workspace"
         self.permissions = permissions or ['read', 'write']
-        self.shared_namespaces = shared_namespaces or []
         self.description = description
         self.registration: Optional[AgentRegistration] = None
         
@@ -96,7 +92,6 @@ class OpenMemoryAgent:
     def register(self, 
                  namespace: Optional[str] = None,
                  permissions: Optional[List[str]] = None,
-                 shared_namespaces: Optional[List[str]] = None,
                  description: Optional[str] = None) -> AgentRegistration:
         """
         Register this agent with OpenMemory proxy.
@@ -104,7 +99,6 @@ class OpenMemoryAgent:
         Args:
             namespace: Override default namespace
             permissions: Override default permissions
-            shared_namespaces: Override default shared namespaces
             description: Override default description
             
         Returns:
@@ -113,8 +107,7 @@ class OpenMemoryAgent:
         payload = {
             'agent_id': self.agent_id,
             'namespace': namespace or self.namespace,
-            'permissions': permissions or self.permissions,
-            'shared_namespaces': shared_namespaces or self.shared_namespaces
+            'permissions': permissions or self.permissions
         }
         
         desc = description or self.description
@@ -128,13 +121,11 @@ class OpenMemoryAgent:
             self.api_key = result['api_key']
             self.namespace = result['namespace']
             self.permissions = result['permissions']
-            self.shared_namespaces = result['shared_namespaces']
             
             self.registration = AgentRegistration(
                 agent_id=result['agent_id'],
                 namespace=result['namespace'],
                 permissions=result['permissions'],
-                shared_namespaces=result['shared_namespaces'],
                 api_key=result['api_key'],
                 description=result.get('description')
             )
@@ -158,7 +149,6 @@ class OpenMemoryAgent:
                 agent_id=result['agent_id'],
                 namespace=result['namespace'],
                 permissions=result['permissions'],
-                shared_namespaces=result['shared_namespaces'],
                 api_key=result.get('api_key', '***hidden***'),
                 description=result.get('description'),
                 registration_date=datetime.fromisoformat(result['registration_date'].replace('Z', '+00:00')) if result.get('registration_date') else None,
@@ -191,7 +181,6 @@ class OpenMemoryAgent:
                     agent_id=agent_data['agent_id'],
                     namespace=agent_data['namespace'],
                     permissions=agent_data['permissions'],
-                    shared_namespaces=agent_data['shared_namespaces'],
                     api_key=agent_data.get('api_key', '***hidden***'),
                     description=agent_data.get('description'),
                     registration_date=datetime.fromisoformat(agent_data['registration_date'].replace('Z', '+00:00')) if agent_data.get('registration_date') else None,
@@ -516,8 +505,8 @@ class NamespaceManager:
             agents_with_access = []
             
             for agent in result.get('agents', []):
-                if (agent.get('namespace') == namespace or 
-                    namespace in agent.get('shared_namespaces', [])):
+                # Only agents with matching primary namespace have access
+                if agent.get('namespace') == namespace:
                     agents_with_access.append(agent['agent_id'])
             
             return agents_with_access
@@ -553,7 +542,6 @@ def register_agent(agent_id: str,
                    namespace: Optional[str] = None,
                    base_url: str = 'http://localhost:8080',
                    permissions: Optional[List[str]] = None,
-                   shared_namespaces: Optional[List[str]] = None,
                    description: Optional[str] = None) -> AgentRegistration:
     """
     Quick helper to register an agent.
@@ -563,7 +551,6 @@ def register_agent(agent_id: str,
         namespace: Primary namespace (defaults to {agent_id}-workspace)
         base_url: OpenMemory server URL
         permissions: Agent permissions
-        shared_namespaces: Additional accessible namespaces
         description: Agent description
         
     Returns:
@@ -574,7 +561,6 @@ def register_agent(agent_id: str,
         base_url=base_url,
         namespace=namespace,
         permissions=permissions,
-        shared_namespaces=shared_namespaces,
         description=description,
         auto_register=False
     )

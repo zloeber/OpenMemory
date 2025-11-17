@@ -358,6 +358,7 @@ import {
     transaction,
     log_maint_op,
 } from "../core/db";
+import { VectorRepositoryFactory } from "../repositories/VectorRepositoryFactory";
 export async function create_cross_sector_waypoints(
     prim_id: string,
     prim_sec: string,
@@ -453,10 +454,17 @@ export async function create_inter_mem_waypoints(
 ): Promise<void> {
     const thresh = 0.75;
     const wt = 0.5;
-    const vecs = await q.get_vecs_by_sector.all(prim_sec);
+    const vectorRepo = await VectorRepositoryFactory.getInstance();
+    const searchResults = await vectorRepo.search({
+        vector: new Float32Array(new_vec),
+        sector: prim_sec,
+        limit: 1000,
+        withVectors: true,
+    });
+    const vecs = searchResults.map(r => ({ id: r.id, v: r.vector }));
     for (const vr of vecs) {
-        if (vr.id === new_id) continue;
-        const ex_vec = buf_to_vec(vr.v);
+        if (vr.id === new_id || !vr.v) continue;
+        const ex_vec = vr.v;
         const sim = cos_sim(new Float32Array(new_vec), ex_vec);
         if (sim >= thresh) {
             await q.ins_waypoint.run(
@@ -613,10 +621,10 @@ const coact_buf: Array<[string, string]> = [];
 const TTL = 60000;
 const VEC_CACHE_MAX = 1000;
 let active_queries = 0;
-const get_vec = (id: string, v: Buffer): number[] => {
+const get_vec = (id: string, v: Buffer | Float32Array): number[] => {
     const ck = vec_cache.get(id);
     if (ck && Date.now() - ck.t < TTL) return ck.v;
-    const vec = bufferToVector(v);
+    const vec = v instanceof Float32Array ? Array.from(v) : bufferToVector(v);
     vec_cache.set(id, { v: vec, t: Date.now() });
     if (vec_cache.size > VEC_CACHE_MAX) {
         const first = vec_cache.keys().next().value;
@@ -704,11 +712,20 @@ export async function hsg_query(
             string,
             Array<{ id: string; similarity: number }>
         > = {};
+        const vectorRepo = await VectorRepositoryFactory.getInstance();
         for (const s of ss) {
             const qv = qe[s];
-            const vecs = await q.get_vecs_by_sector.all(s);
+            const searchResults = await vectorRepo.search({
+                vector: new Float32Array(qv),
+                sector: s,
+                userId: f?.user_id,
+                limit: 1000,
+                withVectors: true,
+            });
+            const vecs = searchResults.map(r => ({ id: r.id, v: r.vector }));
             const sims: Array<{ id: string; similarity: number }> = [];
             for (const vr of vecs) {
+                if (!vr.v) continue;
                 const mv = get_vec(vr.id, vr.v);
                 const sim = cosineSimilarity(qv, mv);
                 sims.push({ id: vr.id, similarity: sim });
@@ -989,15 +1006,18 @@ export async function add_hsg_memory(
             all_sectors,
             use_chunking ? chunks : undefined,
         );
+        const vectorRepo = await VectorRepositoryFactory.getInstance();
         for (const result of emb_res) {
-            const vec_buf = vectorToBuffer(result.vector);
-            await q.ins_vec.run(
+            await vectorRepo.upsert({
                 id,
-                result.sector,
-                user_id || null,
-                vec_buf,
-                result.dim,
-            );
+                sector: result.sector,
+                userId: user_id || '',
+                vector: new Float32Array(result.vector),
+                payload: {
+                    dim: result.dim,
+                    created_at: now,
+                },
+            });
         }
         const mean_vec = calc_mean_vec(emb_res, all_sectors);
         const mean_vec_buf = vectorToBuffer(mean_vec);
@@ -1061,15 +1081,18 @@ export async function update_memory(
                 all_sectors,
                 use_chunking ? chunks : undefined,
             );
+            const vectorRepo = await VectorRepositoryFactory.getInstance();
             for (const result of emb_res) {
-                const vec_buf = vectorToBuffer(result.vector);
-                await q.ins_vec.run(
+                await vectorRepo.upsert({
                     id,
-                    result.sector,
-                    mem.user_id || null,
-                    vec_buf,
-                    result.dim,
-                );
+                    sector: result.sector,
+                    userId: mem.user_id || '',
+                    vector: new Float32Array(result.vector),
+                    payload: {
+                        dim: result.dim,
+                        updated_at: Date.now(),
+                    },
+                });
             }
             const mean_vec = calc_mean_vec(emb_res, all_sectors);
             const mean_vec_buf = vectorToBuffer(mean_vec);

@@ -14,7 +14,30 @@
 # - OpenAPI spec: http://localhost:8080/openapi.json
 # - Health Check: http://localhost:8080/health
 # - Dashboard: http://localhost:3000
+# - Qdrant: http://localhost:6333 (REST API), http://localhost:6334 (gRPC)
 services:
+  # Qdrant Vector Database - High-performance vector storage
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    container_name: qdrant
+    ports:
+      - 6333:6333
+      - 6334:6334
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+      - qdrant-data:/mem0/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /readyz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'HTTP/1.1 200' <&3"]
+
+
   # Main OpenMemory service with integrated MCP proxy
   openmemory:
     build:
@@ -92,9 +115,16 @@ services:
       - OM_PG_TABLE=${OM_PG_TABLE:-openmemory_memories}
       - OM_PG_SSL=${OM_PG_SSL:-disable}
 
-      # Vector Backend (SQLite/Weaviate)
+      # Vector Backend (SQLite/Qdrant/Weaviate)
       - OM_VECTOR_BACKEND=${OM_VECTOR_BACKEND:-sqlite}
       - OM_VECTOR_TABLE=${OM_VECTOR_TABLE:-openmemory_vectors}
+      
+      # Qdrant Configuration
+      - OM_QDRANT_URL=${OM_QDRANT_URL:-http://qdrant:6333}
+      - OM_QDRANT_API_KEY=${OM_QDRANT_API_KEY:-}
+      - OM_QDRANT_COLLECTION=${OM_QDRANT_COLLECTION:-openmemory_vectors}
+      
+      # Weaviate Configuration
       - OM_WEAVIATE_URL=${OM_WEAVIATE_URL:-}
       - OM_WEAVIATE_API_KEY=${OM_WEAVIATE_API_KEY:-}
       - OM_WEAVIATE_CLASS=${OM_WEAVIATE_CLASS:-OpenMemory}
@@ -132,8 +162,13 @@ services:
       # Keyword Extraction
       - OM_KEYWORD_BOOST=${OM_KEYWORD_BOOST:-2.5}
       - OM_KEYWORD_MIN_LENGTH=${OM_KEYWORD_MIN_LENGTH:-3}
+      - OM_PROXY_ONLY_MODE=${OM_PROXY_ONLY_MODE:-true}
+
     volumes:
       - openmemory_data:/data
+    depends_on:
+      qdrant:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8080/health']
@@ -175,5 +210,12 @@ services:
 volumes:
   openmemory_data:
     driver: local
+  qdrant-data:
+    driver: local
   # openmemory_proxy_data: # No longer needed with integrated approach
   #   driver: local
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO

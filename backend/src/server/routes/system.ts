@@ -32,6 +32,56 @@ const TIER_BENEFITS = {
 
 export function sys(app: any) {
     app.get(
+        "/",
+        async (incoming_http_request: any, outgoing_http_response: any) => {
+            const proxyMode = env.proxy_only_mode;
+            
+            if (proxyMode) {
+                // Proxy-only mode response
+                outgoing_http_response.json({
+                    service: "OpenMemory MCP Proxy",
+                    mode: "proxy-only",
+                    version: "2.0-hsg-tiered",
+                    description: "Multi-agent namespace-aware MCP proxy for OpenMemory (Proxy-Only Mode)",
+                    available_endpoints: {
+                        mcp: "/mcp-proxy",
+                        agents: "/api/agents",
+                        namespaces: "/api/namespaces",
+                        proxy_info: "/api/proxy-info",
+                        templates: "/api/registration-template",
+                        proxy_health: "/api/proxy-health",
+                        health: "/health",
+                        sectors: "/sectors",
+                        dashboard: "/dashboard/*"
+                    },
+                    note: "Standard OpenMemory memory API endpoints are disabled in proxy-only mode. Monitoring and dashboard endpoints remain available."
+                });
+            } else {
+                // Standard mode response
+                outgoing_http_response.json({
+                    service: "OpenMemory",
+                    version: "2.0-hsg-tiered",
+                    embedding: getEmbeddingInfo(),
+                    tier,
+                    dim: env.vec_dim,
+                    cache: env.cache_segments,
+                    expected: TIER_BENEFITS[tier],
+                    endpoints: {
+                        health: "/health",
+                        sectors: "/sectors",
+                        memory: "/api/memory",
+                        ...(process.env.OM_MCP_PROXY_ENABLED !== 'false' ? {
+                            mcp_proxy: "/mcp-proxy",
+                            agents: "/api/agents",
+                            namespaces: "/api/namespaces"
+                        } : {})
+                    }
+                });
+            }
+        },
+    );
+
+    app.get(
         "/health",
         async (incoming_http_request: any, outgoing_http_response: any) => {
             outgoing_http_response.json({
