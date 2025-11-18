@@ -34,6 +34,7 @@ reflective:
   openai: text-embedding-3-large
   gemini: models/embedding-001
   local: all-mpnet-base-v2
+
 # Available Ollama models (pull with: ollama pull <model>)
 # - nomic-embed-text (768d, recommended)
 # - mxbai-embed-large (1024d)

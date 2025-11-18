@@ -37,15 +37,16 @@ export default function memories() {
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [editingMem, setEditingMem] = useState<mem | null>(null)
     const [deletingMemId, setDeletingMemId] = useState<string | null>(null)
+    const [namespace, setNamespace] = useState("default")
 
     const hasApiKey = Boolean((process.env.NEXT_PUBLIC_API_KEY || "").trim())
     const limit = 1000
 
     useEffect(() => {
-        if (hasApiKey) {
+        if (hasApiKey && namespace) {
             fetchMems()
         }
-    }, [page, filt, hasApiKey])
+    }, [page, filt, hasApiKey, namespace])
 
     async function fetchMems() {
         setloading(true)
@@ -53,8 +54,8 @@ export default function memories() {
         try {
             const offset = (page - 1) * limit
             const url = filt !== "all"
-                ? `${API_BASE_URL}/memory/all?l=${limit}&u=${offset}&sector=${filt}`
-                : `${API_BASE_URL}/memory/all?l=${limit}&u=${offset}`
+                ? `${API_BASE_URL}/memory/all?namespace=${namespace}&l=${limit}&u=${offset}&sector=${filt}`
+                : `${API_BASE_URL}/memory/all?namespace=${namespace}&l=${limit}&u=${offset}`
             const res = await fetch(url, { headers: getHeaders() })
             if (!res.ok) throw new Error('failed to fetch memories')
             const data = await res.json()
@@ -79,6 +80,7 @@ export default function memories() {
                 headers: getHeaders(),
                 body: JSON.stringify({
                     query: srch,
+                    namespace: namespace,
                     k: 1000,
                     filters: filt !== "all" ? { sector: filt } : undefined,
                 }),
@@ -109,6 +111,7 @@ export default function memories() {
                 headers: getHeaders(),
                 body: JSON.stringify({
                     content,
+                    namespace: namespace,
                     tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
                     metadata: { sector: sector },
                 }),
@@ -128,6 +131,7 @@ export default function memories() {
                 headers: getHeaders(),
                 body: JSON.stringify({
                     content,
+                    namespace: namespace,
                     tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
                 }),
             })
@@ -142,7 +146,7 @@ export default function memories() {
 
     async function handleDeleteMemory(id: string) {
         try {
-            const res = await fetch(`${API_BASE_URL}/memory/${id}`, {
+            const res = await fetch(`${API_BASE_URL}/memory/${id}?namespace=${namespace}`, {
                 method: 'DELETE',
                 headers: getHeaders(),
             })
@@ -168,10 +172,22 @@ export default function memories() {
     return (
         <div className="min-h-screen" suppressHydrationWarning>
             <div className="flex items-center justify-between mb-6" suppressHydrationWarning>
-                <h1 className="text-white text-2xl">Memory Topology</h1>
+                <div className="flex items-center space-x-4">
+                    <h1 className="text-white text-2xl">Memory Topology</h1>
+                    <div className="flex items-center space-x-2">
+                        <label className="text-stone-400 text-sm">Namespace:</label>
+                        <input
+                            type="text"
+                            value={namespace}
+                            onChange={(e) => setNamespace(e.target.value)}
+                            className="bg-stone-900 text-white px-3 py-1 rounded-lg border border-stone-700 focus:border-sky-500 focus:outline-none"
+                            placeholder="default"
+                        />
+                    </div>
+                </div>
                 <button
                     onClick={() => setShowAddModal(true)}
-                    disabled={!hasApiKey}
+                    disabled={!hasApiKey || !namespace}
                     className="rounded-xl p-2 px-4 bg-sky-500 hover:bg-sky-600 text-white flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5"><path fillRule="evenodd" d="M12 3.75a.75.75 0 0 1 .75.75v6.75h6.75a.75.75 0 0 1 0 1.5h-6.75v6.75a.75.75 0 0 1-1.5 0v-6.75H4.5a.75.75 0 0 1 0-1.5h6.75V4.5a.75.75 0 0 1 .75-.75Z" clipRule="evenodd" /></svg>

@@ -634,14 +634,210 @@ Check that:
 - All tasks referenced in workflow exist in agent's tasks list
 - Required fields (role, goal) are provided for each agent
 
-## Contributing
 
-When creating new flow definitions:
-1. Follow the YAML structure outlined above
-2. Provide clear descriptions for agents and tasks
-3. Document any custom tools or requirements
-4. Include memory usage guidelines for agents
+# CrewAI Flow Launcher Web UI
+
+A Gradio-based web interface for launching and monitoring CrewAI flows defined in YAML files.
+
+## Features
+
+- 🎯 **Flow Selection**: Automatically discovers and lists available flow YAML files
+- ⚙️ **Dynamic Inputs**: Automatically generates input fields based on flow definitions
+- 📊 **Real-time Monitoring**: Stream execution progress and output in real-time
+- 🔌 **MCP Integration**: Supports Model Context Protocol (MCP) servers
+- 🤖 **Multi-Agent**: Works with any CrewAI flow with multiple agents and tasks
+- 🎨 **Modern UI**: Clean, responsive Gradio interface
+
+## Installation
+
+1. Install the required dependencies:
+
+```bash
+pip install -r launch_flow_ui_requirements.txt
+```
+
+Or install individually:
+
+```bash
+pip install gradio crewai pyyaml click pydantic mcp httpx
+```
+
+## Usage
+
+### Starting the Web UI
+
+Launch the web interface:
+
+```bash
+python launch_flow_ui.py
+```
+
+The UI will be available at `http://localhost:7860`
+
+### Using the Interface
+
+1. **Select a Flow File**: Choose from the dropdown of available YAML flow definitions
+2. **Configure Inputs**: Input fields will appear automatically based on the flow's input definitions
+3. **Enable Verbose Mode** (optional): Check the box for detailed logging
+4. **Launch Flow**: Click the "▶️ Launch Flow" button to start execution
+5. **Monitor Progress**: Watch real-time updates in the output panel
+
+### Example Flow Files
+
+The UI automatically detects flow files in the current directory:
+
+- `improve-project-flow.yml` - Multi-agent project improvement workflow
+- `test-simple-flow.yml` - Simple test flow
+- `test-first-agent.yml` - Single agent test
+- Any other `*.yml` or `*.yaml` files (excluding infrastructure files)
+
+## Flow Output Types
+
+The UI displays different types of output:
+
+- 📋 **Info**: General progress updates
+- 📝 **Markdown**: Formatted text, results, and summaries
+- 💻 **Code**: Code snippets and technical output
+- ❌ **Error**: Error messages and stack traces
+
+## Architecture
+
+### Components
+
+1. **Flow Launcher Integration**: Uses the existing `launch_flow.py` FlowLauncher class
+2. **Shared Queue**: Thread-safe queue for streaming output from background execution
+3. **Gradio Interface**: Modern web UI with dynamic component generation
+4. **Task Info Model**: Pydantic model for structured output messages
+
+### Flow Execution Process
+
+```
+Select Flow → Parse Inputs → Load MCP Servers → Create Agents → 
+Create Tasks → Launch Crew → Stream Results → Complete
+```
+
+### Threading Model
+
+- **Main Thread**: Runs the Gradio interface
+- **Worker Thread**: Executes the flow in the background
+- **Queue**: Streams output from worker to UI
+
+## Comparison with Engineering Team UI
+
+This UI is modeled after `engineering_team_using_flow/app.py` but adapted for:
+
+- **Generic flows**: Works with any YAML flow definition
+- **Dynamic inputs**: Auto-generates input fields based on flow configuration
+- **Flow discovery**: Automatically finds available flow files
+- **Simpler state**: No complex flow state management (handled by FlowLauncher)
+
+## Troubleshooting
+
+### No flow files appear in dropdown
+
+- Ensure you're in the correct directory with YAML flow files
+- Check that flow files have `.yml` or `.yaml` extensions
+- Verify files are not infrastructure files (docker-compose, Taskfile)
+
+### Import errors
+
+Install missing dependencies:
+
+```bash
+pip install -r launch_flow_ui_requirements.txt
+```
+
+### MCP connection errors
+
+- Ensure MCP servers specified in flow are running
+- Check network connectivity for HTTP-based MCP servers
+- Verify environment variables are set correctly
+
+### Flow execution errors
+
+- Enable **Verbose Mode** for detailed error messages
+- Check that all required inputs are provided
+- Verify LLM configurations are correct
+- Ensure agent definitions are complete
+
+## Advanced Usage
+
+### Custom Port
+
+Run on a different port:
+
+```python
+demo.launch(server_port=8080)
+```
+
+### Share Publicly
+
+Enable Gradio sharing:
+
+```python
+demo.launch(share=True)
+```
+
+### Authentication
+
+Add authentication:
+
+```python
+demo.launch(auth=("username", "password"))
+```
+
+## Integration with Existing Flows
+
+The UI is compatible with any flow that follows the YAML schema:
+
+```yaml
+version: "1.0"
+description: "Flow description"
+
+inputs:
+  - name: input_name
+    description: "Input description"
+    type: string
+    default: "default value"
+
+agents:
+  agent_name:
+    role: "Agent Role"
+    goal: "Agent goal"
+    # ... agent configuration
+
+crew:
+  name: "Crew Name"
+  agents:
+    - agent_name
+
+workflow:
+  - agent: agent_name
+    task: task_name
+```
+
+## Development
+
+### Adding New Features
+
+1. **Custom Output Types**: Extend `TaskInfo.type` with new types
+2. **Enhanced Visualization**: Modify the chat component styling
+3. **Progress Tracking**: Add progress bars or status indicators
+4. **Result Export**: Add functionality to export results
+
+### Debugging
+
+Enable verbose mode and check:
+- Browser console for UI errors
+- Terminal output for flow execution logs
+- Stack traces in the output panel
 
 ## License
 
-See the main project LICENSE file.
+Same as the parent OpenMemory project.
+
+## See Also
+
+- [launch_flow.py](./launch_flow.py) - CLI launcher for flows
+- [improve-project-flow.yml](./improve-project-flow.yml) - Example flow definition
+- [engineering_team_using_flow/](./engineering_team_using_flow/) - Original UI inspiration

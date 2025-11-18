@@ -66,12 +66,14 @@ class MCPTool(BaseTool):
     def __init__(self, name: str, description: str, mcp_tool_name: str, 
                  session: Any, input_schema: Dict[str, Any]):
         """Initialize MCP tool wrapper."""
-        super().__init__()
-        self.name = name
-        self.description = description
-        self.mcp_tool_name = mcp_tool_name
-        self.session = session
-        self.input_schema = input_schema
+        # Pass all required fields to parent init
+        super().__init__(
+            name=name,
+            description=description,
+            mcp_tool_name=mcp_tool_name,
+            session=session,
+            input_schema=input_schema
+        )
     
     def _run(self, **kwargs) -> str:
         """Execute the MCP tool synchronously."""
@@ -117,13 +119,15 @@ class HTTPMCPTool(BaseTool):
     def __init__(self, name: str, description: str, mcp_tool_name: str,
                  base_url: str, headers: Dict[str, str], input_schema: Dict[str, Any]):
         """Initialize HTTP MCP tool wrapper."""
-        super().__init__()
-        self.name = name
-        self.description = description
-        self.mcp_tool_name = mcp_tool_name
-        self.base_url = base_url
-        self.headers = headers
-        self.input_schema = input_schema
+        # Pass all required fields to parent init
+        super().__init__(
+            name=name,
+            description=description,
+            mcp_tool_name=mcp_tool_name,
+            base_url=base_url,
+            headers=headers,
+            input_schema=input_schema
+        )
     
     def _run(self, **kwargs) -> str:
         """Execute the HTTP MCP tool synchronously."""
@@ -759,19 +763,20 @@ class FlowLauncher:
                 # CrewAI's LLM class expects ollama/ prefix for Ollama models
                 llm_model = f"ollama/{model}"
                 
+                # Extended configuration for better stability with remote Ollama
                 llm = LLM(
                     model=llm_model,
                     base_url=base_url,
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    timeout=300,  # 5 minute timeout for LLM responses
+                    timeout=600,  # 10 minute timeout for remote LLM responses
                 )
                 
                 print(f"  ✅ Using CrewAI native LLM class")
                 print(f"  ✅ Model: {llm_model}")
                 if base_url:
                     print(f"  ✅ Base URL: {base_url}")
-                print(f"  ✅ Timeout: 300s")
+                print(f"  ✅ Timeout: 600s")
                 return llm
             
             elif provider == 'openai':
@@ -1082,8 +1087,32 @@ class FlowLauncher:
         print("="*60)
         print(f"\nFlow: {self.flow_def.description}\n")
         
-        # Execute the crew
-        result = crew.kickoff(inputs=crew_inputs or {})
+        # Execute the crew with better error handling
+        try:
+            result = crew.kickoff(inputs=crew_inputs or {})
+        except Exception as e:
+            print("\n" + "="*60)
+            print("ERROR DURING EXECUTION")
+            print("="*60)
+            print(f"\nError: {str(e)}")
+            print(f"Error type: {type(e).__name__}")
+            
+            # Check for common LLM-related errors
+            error_msg = str(e).lower()
+            if 'none or empty' in error_msg or 'invalid response' in error_msg:
+                print("\n⚠️  This appears to be an LLM response issue.")
+                print("Possible causes:")
+                print("  1. The LLM server is not responding properly")
+                print("  2. Network timeout to remote LLM server")
+                print("  3. The model context is too large")
+                print("  4. The model is producing empty responses")
+                print("\nTroubleshooting:")
+                print("  - Verify LLM connection: python launch_flow.py show " + self.flow_file.name)
+                print("  - Check if the remote Ollama server is responsive")
+                print("  - Try reducing the complexity of agent instructions")
+                print("  - Increase timeout in the flow YAML (llms.timeout)")
+            
+            raise
         
         print("\n" + "="*60)
         print("EXECUTION COMPLETE")
@@ -1200,6 +1229,279 @@ def run_command(flow_file, whatif, no_validate, project_path, project_id, custom
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+    except yaml.YAMLError as e:
+        click.echo(f"Error parsing YAML: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        if verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@cli.command(name='test-mcp')
+@click.argument('flow_file', type=click.Path(exists=True))
+@click.option('--no-validate', is_flag=True,
+              help='Skip schema validation of the flow definition')
+@click.option('--connect', is_flag=True,
+              help='Actually connect to MCP servers and test connections')
+@click.option('--list-tools', is_flag=True,
+              help='List all tools from connected MCP servers (requires --connect)')
+@click.option('--verbose', '-v', is_flag=True,
+              help='Show detailed information')
+def test_mcp_command(flow_file, no_validate, connect, list_tools, verbose):
+    """
+    Test and report on MCP server configurations in a flow definition.
+    
+    FLOW_FILE: Path to the YAML flow definition file
+    
+    Examples:
+    
+      # Show MCP configuration
+      python launch_flow.py test-mcp improve-project-flow.yml
+      
+      # Test actual connections
+      python launch_flow.py test-mcp improve-project-flow.yml --connect
+      
+      # List all available tools
+      python launch_flow.py test-mcp improve-project-flow.yml --connect --list-tools
+    """
+    import os
+    
+    try:
+        click.echo("="*60)
+        click.echo("MCP SERVER TESTING & REPORT")
+        click.echo("="*60)
+        click.echo(f"Flow file: {flow_file}\n")
+        
+        # Load flow definition
+        flow_path = Path(flow_file)
+        if not flow_path.exists():
+            click.echo(f"Error: File not found: {flow_file}", err=True)
+            sys.exit(1)
+        
+        with open(flow_path, 'r') as f:
+            flow_data = yaml.safe_load(f)
+        
+        # Validate if requested
+        if not no_validate and SCHEMA_VALIDATION_AVAILABLE:
+            validator = FlowValidator()
+            is_valid, errors = validator.validate(flow_data, strict=False)
+            if not is_valid:
+                click.echo("⚠️  Warning: Flow validation failed", err=True)
+                if verbose:
+                    for error in errors:
+                        click.echo(f"  • {error}", err=True)
+                click.echo()
+        
+        # Extract MCP configurations
+        mcps = flow_data.get('mcps', [])
+        
+        if not mcps:
+            click.echo("No MCP server configurations found in flow definition.")
+            sys.exit(0)
+        
+        click.echo(f"Found {len(mcps)} MCP server configuration(s):\n")
+        
+        # Report on each MCP server
+        for idx, mcp in enumerate(mcps, 1):
+            name = mcp.get('name', f'mcp_{idx}')
+            description = mcp.get('description', '')
+            mcp_type = mcp.get('type', 'stdio')
+            
+            click.echo(f"[{idx}] {name}")
+            if description:
+                click.echo(f"    Description: {description}")
+            click.echo(f"    Type: {mcp_type}")
+            
+            if mcp_type == 'stdio':
+                args = mcp.get('args', [])
+                env = mcp.get('env', {})
+                
+                if args:
+                    click.echo(f"    Command: {' '.join(args)}")
+                
+                if env:
+                    click.echo(f"    Environment Variables:")
+                    for key, value in env.items():
+                        # Resolve env vars
+                        resolved = value
+                        if '{$env:' in str(value):
+                            import re
+                            pattern = r'\{\$env:([A-Za-z_][A-Za-z0-9_]*)\}'
+                            resolved = re.sub(pattern, lambda m: os.environ.get(m.group(1), m.group(0)), value)
+                        
+                        # Mask sensitive values
+                        if any(s in key.lower() for s in ['key', 'token', 'secret', 'password']):
+                            if len(str(resolved)) > 8:
+                                display_value = f"{str(resolved)[:4]}...{str(resolved)[-4:]}"
+                            else:
+                                display_value = "***"
+                        else:
+                            display_value = resolved
+                        
+                        click.echo(f"      {key}: {display_value}")
+                        if resolved != value and verbose:
+                            click.echo(f"        (Original: {value})")
+            
+            elif mcp_type == 'http':
+                url = mcp.get('url', '')
+                options = mcp.get('options', {})
+                
+                # Resolve env vars in URL
+                resolved_url = url
+                if '{$env:' in url:
+                    import re
+                    pattern = r'\{\$env:([A-Za-z_][A-Za-z0-9_]*)\}'
+                    resolved_url = re.sub(pattern, lambda m: os.environ.get(m.group(1), m.group(0)), url)
+                
+                click.echo(f"    URL: {resolved_url}")
+                if resolved_url != url and verbose:
+                    click.echo(f"    (Original: {url})")
+                
+                if options and verbose:
+                    click.echo(f"    Options:")
+                    for key, value in options.items():
+                        if key == 'headers' and isinstance(value, dict):
+                            click.echo(f"      {key}:")
+                            for hkey, hval in value.items():
+                                # Mask auth headers
+                                if any(s in hkey.lower() for s in ['auth', 'key', 'token']):
+                                    if len(str(hval)) > 8:
+                                        display_value = f"{str(hval)[:4]}...{str(hval)[-4:]}"
+                                    else:
+                                        display_value = "***"
+                                else:
+                                    display_value = hval
+                                click.echo(f"        {hkey}: {display_value}")
+                        else:
+                            click.echo(f"      {key}: {value}")
+            
+            # Test connection if requested
+            if connect:
+                if not MCP_AVAILABLE:
+                    click.echo(f"    ⚠️  MCP package not installed - cannot test connection")
+                    click.echo(f"    Install with: pip install mcp")
+                else:
+                    click.echo(f"    Testing connection...")
+                    
+                    # Create launcher to test connection
+                    launcher = FlowLauncher(flow_file, whatif=False, verbose=verbose)
+                    try:
+                        # Load flow to initialize
+                        launcher.load_flow(validate=not no_validate)
+                        
+                        # Connect to this specific MCP server
+                        if mcp_type == 'stdio':
+                            try:
+                                launcher._connect_stdio_mcp(mcp)
+                                click.echo(f"    ✅ Connection successful")
+                                
+                                # Count loaded tools
+                                mcp_tools = [t for t in launcher.tools if hasattr(t, 'mcp_tool_name')]
+                                if mcp_tools:
+                                    click.echo(f"    ✅ Loaded {len(mcp_tools)} tool(s)")
+                                    
+                                    if list_tools:
+                                        click.echo(f"    Available tools:")
+                                        for tool in mcp_tools:
+                                            tool_name = getattr(tool, 'name', 'Unknown')
+                                            tool_desc = getattr(tool, 'description', 'No description')
+                                            mcp_name = getattr(tool, 'mcp_tool_name', tool_name)
+                                            
+                                            click.echo(f"      • {mcp_name}")
+                                            if verbose:
+                                                click.echo(f"        CrewAI name: {tool_name}")
+                                                click.echo(f"        Description: {tool_desc[:80]}")
+                                                
+                                                # Show parameters if available
+                                                if hasattr(tool, 'input_schema') and tool.input_schema:
+                                                    schema = tool.input_schema
+                                                    if isinstance(schema, dict) and 'properties' in schema:
+                                                        params = list(schema['properties'].keys())
+                                                        if params:
+                                                            click.echo(f"        Parameters: {', '.join(params)}")
+                                else:
+                                    click.echo(f"    ⚠️  No tools found")
+                            except Exception as e:
+                                click.echo(f"    ❌ Connection failed: {str(e)}")
+                                if verbose:
+                                    import traceback
+                                    traceback.print_exc()
+                        
+                        elif mcp_type == 'http':
+                            if not HTTPX_AVAILABLE:
+                                click.echo(f"    ⚠️  httpx not installed - cannot test HTTP connection")
+                                click.echo(f"    Install with: pip install httpx")
+                            else:
+                                try:
+                                    launcher._connect_http_mcp(mcp)
+                                    click.echo(f"    ✅ Connection successful")
+                                    
+                                    # Count loaded tools
+                                    mcp_tools = [t for t in launcher.tools if hasattr(t, 'mcp_tool_name')]
+                                    if mcp_tools:
+                                        click.echo(f"    ✅ Loaded {len(mcp_tools)} tool(s)")
+                                        
+                                        if list_tools:
+                                            click.echo(f"    Available tools:")
+                                            for tool in mcp_tools:
+                                                tool_name = getattr(tool, 'name', 'Unknown')
+                                                tool_desc = getattr(tool, 'description', 'No description')
+                                                mcp_name = getattr(tool, 'mcp_tool_name', tool_name)
+                                                
+                                                click.echo(f"      • {mcp_name}")
+                                                if verbose:
+                                                    click.echo(f"        CrewAI name: {tool_name}")
+                                                    click.echo(f"        Description: {tool_desc[:80]}")
+                                                    
+                                                    # Show parameters if available
+                                                    if hasattr(tool, 'input_schema') and tool.input_schema:
+                                                        schema = tool.input_schema
+                                                        if isinstance(schema, dict) and 'properties' in schema:
+                                                            params = list(schema['properties'].keys())
+                                                            if params:
+                                                                click.echo(f"        Parameters: {', '.join(params)}")
+                                    else:
+                                        click.echo(f"    ⚠️  No tools found")
+                                except Exception as e:
+                                    click.echo(f"    ❌ Connection failed: {str(e)}")
+                                    if verbose:
+                                        import traceback
+                                        traceback.print_exc()
+                        
+                        # Cleanup
+                        launcher.cleanup()
+                        
+                    except Exception as e:
+                        click.echo(f"    ❌ Error during testing: {str(e)}")
+                        if verbose:
+                            import traceback
+                            traceback.print_exc()
+            
+            click.echo()
+        
+        # Summary
+        click.echo("="*60)
+        click.echo("SUMMARY")
+        click.echo("="*60)
+        click.echo(f"Total MCP servers configured: {len(mcps)}")
+        
+        stdio_count = sum(1 for m in mcps if m.get('type', 'stdio') == 'stdio')
+        http_count = sum(1 for m in mcps if m.get('type') == 'http')
+        
+        if stdio_count:
+            click.echo(f"  Stdio servers: {stdio_count}")
+        if http_count:
+            click.echo(f"  HTTP servers: {http_count}")
+        
+        if connect:
+            click.echo("\nConnection tests completed.")
+        else:
+            click.echo("\nTo test actual connections, use: --connect")
+            click.echo("To list all tools, use: --connect --list-tools")
+        
     except yaml.YAMLError as e:
         click.echo(f"Error parsing YAML: {e}", err=True)
         sys.exit(1)
@@ -1384,7 +1686,7 @@ def show_command(flow_file, no_validate, verbose):
 
 if __name__ == "__main__":
     # Support both old and new CLI formats
-    if len(sys.argv) > 1 and sys.argv[1] not in ['run', 'show', '--help', '--version']:
+    if len(sys.argv) > 1 and sys.argv[1] not in ['run', 'show', 'test-mcp', '--help', '--version']:
         # Old format: python launch_flow.py flow.yml
         # Convert to new format: python launch_flow.py run flow.yml
         sys.argv.insert(1, 'run')

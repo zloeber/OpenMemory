@@ -14,7 +14,6 @@ import { q, all_async, memories_table } from "../core/db";
 import { getEmbeddingInfo } from "../memory/embed";
 import { j, p } from "../utils";
 import type { sector_type, mem_row, rpc_err_code } from "../core/types";
-import { update_user_summary } from "../memory/user_summary";
 
 const sec_enum = z.enum([
     "episodic",
@@ -184,10 +183,6 @@ export const create_mcp_srv = () => {
                 metadata,
                 u,
             );
-            if (u)
-                update_user_summary(u).catch((err) =>
-                    console.error("[MCP] user summary update failed:", err),
-                );
             const txt = `Stored memory ${res.id} (primary=${res.primary_sector}) across sectors: ${res.sectors.join(", ")}${u ? ` [user=${u}]` : ""}`;
             const payload = {
                 id: res.id,

@@ -14,12 +14,13 @@ export const proxy_only_mode_middleware = (req: any, res: any, next: any) => {
     
     const path = req.path || req.url;
     
-    // Allow proxy endpoints, Swagger, dashboard, and system endpoints
+    // Allow proxy endpoints, Swagger, dashboard, system endpoints, and temporal API
     const allowedPaths = [
         '/mcp-proxy',
         '/api/namespaces',
         '/api/proxy-info',
         '/api/proxy-health',
+        '/api/temporal',
         '/api-docs',
         '/swagger',
         '/health',

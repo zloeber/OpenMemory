@@ -4,7 +4,6 @@ import { dynroutes } from "./dynamics";
 import { ide } from "./ide";
 import { compression } from "./compression";
 import { lg } from "./langgraph";
-import { usr } from "./users";
 import { temporal } from "./temporal";
 import { dash } from "./dashboard";
 import { metrics_routes } from "./metrics";
@@ -17,7 +16,6 @@ export function routes(app: any) {
     ide(app);
     compression(app);
     lg(app);
-    usr(app);
     temporal(app);
     dash(app);
     metrics_routes(app);

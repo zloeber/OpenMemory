@@ -48,6 +48,7 @@ COPY --from=builder /app/node_modules ./node_modules/
 COPY --from=builder /app/dist ./dist/
 COPY --from=builder /app/migrations ./migrations/
 COPY package.json ./
+COPY ./config ./
 
 # Create a directory for persistent data and secure file permissions
 RUN mkdir -p /data \

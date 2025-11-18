@@ -9,9 +9,9 @@ import {
     log_authenticated_request,
 } from "./middleware/auth";
 import { start_reflection } from "../memory/reflect";
-import { start_user_summary_reflection } from "../memory/user_summary";
 import { sendTelemetry } from "../core/telemetry";
 import { req_tracker_mw } from "./routes/dashboard";
+import { temporal } from "./routes/temporal";
 
 const ASC = `   ____                   __  __                                 
   / __ \\                 |  \\/  |                                
@@ -70,6 +70,10 @@ async function initializeServer() {
     if (env.proxy_only_mode) {
         app.use(proxy_only_mode_middleware);
     }
+
+    // Always initialize temporal API endpoints (required for namespace operations)
+    temporal(app);
+    console.log("[CONFIG] Temporal API endpoints: ENABLED");
 
     // When proxy_only_mode is enabled, only setup proxy routes
     if (env.proxy_only_mode) {
@@ -144,7 +148,6 @@ async function initializeServer() {
         .catch(console.error);
 
     start_reflection();
-    start_user_summary_reflection();
 
     console.log(`[SERVER] Starting on port ${env.port}`);
     app.listen(env.port, () => {

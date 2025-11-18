@@ -1,0 +1,63 @@
+ontology:
+  name: ""                # Unique ontology name
+  version: "1.0"
+  domain: ""              # Domain of use (e.g., psychology, gaming, finance)
+  description: ""         # High-level description of the ontology
+
+  metadata:
+    author: ""
+    created: ""
+    modified: ""
+    source_standards:     # Optional references (FOAF, SKOS, schema.org, DSM-5, etc.)
+      - ""
+
+  memory_mappings:
+    # Which memory types store what?
+    semantic:        []   # Entities, stable facts
+    episodic:        []   # Events, interactions, time series
+    procedural:      []   # Workflows, actions
+    reflective:      []   # Rules, insights, evaluations
+    emotional:       []   # Sentiment, affective state
+    temporal:        []   # Time-based relationships, state changes
+
+  entities:
+    - name: ""            # e.g., "Person", "Monster", "Quest", "Emotion"
+      description: ""
+      attributes:
+        - name: ""
+          type: ""        # string | int | float | enum | datetime | boolean | entity_ref
+          description: ""
+          required: false
+          enum: []        # optional
+
+      memory_type: ""     # semantic | episodic | procedural | reflective | emotional | temporal
+
+  relationships:
+    - name: ""            # e.g., "owns_pet", "therapist_of", "in_party_with"
+      description: ""
+      from: ""            # entity
+      to: ""              # entity
+      type: ""            # association | hierarchy | causal | temporal | emotional
+      cardinality: ""     # 1:1 | 1:N | N:M
+      memory_type: ""     # where this relationship should be stored
+      properties:
+        - name: ""        # optional relationship attributes
+          type: ""
+          description: ""
+
+  rules:
+    inference:            # logical rules, classification rules, heuristics
+      - id: ""
+        description: ""
+        if: []            # conditions
+        then: []          # actions or inferred relationships
+
+    validation:
+      - id: ""
+        description: ""
+        applies_to: ""    # entity | relationship
+        rule: ""          # e.g., "age >= 0", "start_time < end_time"
+
+  examples:
+    entities: []          # small sample entity documents
+    relationships: []     # examples of instantiated relationships

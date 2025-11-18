@@ -4,6 +4,12 @@ description: >
   A multi-agent crew that improves a project by leveraging path-specific AGENTS.md
   instructions and shared memory with explicit memory type guidance.
 
+# Schema Features:
+# - LLM Binding: Agents can reference LLM definitions by name using the "llm" field
+# - Crew-level Default: The crew can specify a default "llm" that applies to all agents unless overridden
+# - Agent-level Override: Individual agents can specify their own "llm" to use a different model
+# - LLM Resolution Order: Agent-level LLM > Crew-level LLM > First defined LLM
+
 env:
   CONTEXT7_API_KEY: "{$env:CONTEXT7_API_KEY}"
   # MCP_SHELL_SEC_CONFIG_FILE: "shell-security.yml"
@@ -141,6 +147,7 @@ agents:
   lead_agent:
     role: "Lead Project Strategist"
     allow_delegation: true
+    llm: "ollama"  # Reference to LLM definition by name
     goal: >
       Maintain the global project model, identify improvements, and hand off
       selected spec based prompt to the developer agent to fulfill.
@@ -189,6 +196,7 @@ agents:
 
   developer_agent:
     role: "Implementation Engineer"
+    llm: "ollama"  # Reference to LLM definition by name
     goal: >
       Implement (agent_instructions) according to AGENTS.md instructions relevant to the (target_path). 
 
@@ -225,6 +233,7 @@ agents:
 
   qa_agent:
     role: "Quality Assurance Analyst"
+    llm: "ollama"  # Reference to LLM definition by name
     goal: >
       Validate the patch using AGENTS.md testing procedures relevant to the target path.
 
@@ -261,6 +270,7 @@ crew:
   description: >
     Multi-agent system that evolves a project based on path-specific AGENTS.md instructions,
     using shared memory with explicit memory type guidance.
+  llm: "ollama"  # Default LLM for the crew (can be overridden per agent)
   agents:
     - lead_agent
     - developer_agent
@@ -280,6 +290,17 @@ llms:
   - name: ollama
     provider: "ollama"
     base_url: "http://linbox5:11434"
+    model: "mistral:latest"
+    temperature: 0.2
+    max_tokens: 4000
+    top_p: 0.9
+    frequency_penalty: 0
+    presence_penalty: 0
+    best_of: 1
+    n: 1
+  - name: ollama-gpt
+    provider: "ollama"
+    base_url: "http://linbox5:11434"
     model: "gpt-oss:latest"
     temperature: 0.2
     max_tokens: 4000
@@ -288,3 +309,4 @@ llms:
     presence_penalty: 0
     best_of: 1
     n: 1
+  #   n: 1

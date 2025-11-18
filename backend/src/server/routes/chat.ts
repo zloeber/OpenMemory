@@ -1,6 +1,5 @@
 import { process_chat_history } from "../../memory/chat_integration";
 import type { chat_integration_req } from "../../core/types";
-import { update_user_summary } from "../../memory/user_summary";
 
 export function chat_routes(app: any) {
     /**
@@ -25,6 +24,12 @@ export function chat_routes(app: any) {
                 error: "messages array cannot be empty",
             });
         }
+        
+        if (!body?.namespace) {
+            return res.status(400).json({
+                error: "namespace is required",
+            });
+        }
 
         // Validate message format
         for (const msg of body.messages) {
@@ -41,29 +46,15 @@ export function chat_routes(app: any) {
         }
 
         try {
-            // Extract namespace/user_id from various sources
-            const user_id =
-                body.user_id ||
-                body.namespace ||
-                req.headers["x-namespace"] ||
-                undefined;
+            // Use namespace from body (now required)
+            const namespace = body.namespace;
 
             // Process chat history
             const result = await process_chat_history(
                 body.messages,
-                user_id,
+                namespace,
                 body.model,
             );
-
-            // Update user summary if user_id is provided
-            if (user_id) {
-                update_user_summary(user_id).catch((e) =>
-                    console.error(
-                        "[chat_routes] user summary update failed:",
-                        e,
-                    ),
-                );
-            }
 
             res.json({
                 success: true,

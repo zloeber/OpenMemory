@@ -15,6 +15,14 @@ RUN npm ci --only=production
 FROM base AS builder
 WORKDIR /app
 
+# Accept build arguments for Next.js public environment variables
+ARG NEXT_PUBLIC_API_KEY
+ARG NEXT_PUBLIC_API_URL
+
+# Set them as environment variables for the build
+ENV NEXT_PUBLIC_API_KEY=$NEXT_PUBLIC_API_KEY
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copy package files
 COPY package*.json ./
 RUN npm ci
