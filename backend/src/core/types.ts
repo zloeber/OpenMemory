@@ -124,3 +124,24 @@ export type ide_context_query_req = {
 };
 
 export type ide_session_req = { user?: string; project?: string; ide?: string };
+
+export type chat_message = {
+    role: "user" | "assistant" | "system";
+    content: string;
+    timestamp?: number;
+};
+
+export type chat_integration_req = {
+    messages: chat_message[];
+    user_id?: string;
+    namespace?: string;
+    model?: string;
+    metadata?: Record<string, unknown>;
+};
+
+export type extracted_memory = {
+    content: string;
+    sector?: sector_type;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+};

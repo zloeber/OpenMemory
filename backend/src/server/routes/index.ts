@@ -8,6 +8,7 @@ import { usr } from "./users";
 import { temporal } from "./temporal";
 import { dash } from "./dashboard";
 import { metrics_routes } from "./metrics";
+import { chat_routes } from "./chat";
 
 export function routes(app: any) {
     sys(app);
@@ -20,5 +21,6 @@ export function routes(app: any) {
     temporal(app);
     dash(app);
     metrics_routes(app);
+    chat_routes(app);
 }
 
