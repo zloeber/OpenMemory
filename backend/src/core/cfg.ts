@@ -99,4 +99,14 @@ export const env = {
     qdrant_url: str(process.env.OM_QDRANT_URL, "http://localhost:6333"),
     qdrant_api_key: process.env.OM_QDRANT_API_KEY,
     qdrant_collection: str(process.env.OM_QDRANT_COLLECTION, "openmemory_vectors"),
+    // LLM Configuration for Chat Processing
+    llm_chat_model: str(
+        process.env.OM_LLM_CHAT_MODEL,
+        "llama3.2:latest",
+    ),
+    llm_chat_provider: str(process.env.OM_LLM_CHAT_PROVIDER, "ollama") as
+        | "ollama"
+        | "openai",
+    llm_chat_temperature: num(process.env.OM_LLM_CHAT_TEMPERATURE, 0.7),
+    llm_chat_max_tokens: num(process.env.OM_LLM_CHAT_MAX_TOKENS, 2000),
 };

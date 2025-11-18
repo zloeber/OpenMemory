@@ -509,9 +509,34 @@ curl http://localhost:8080/users/user123/summary
 
 - **Memory operations** - Add, query, update, delete, reinforce
 - **User management** - Per-user isolation with automatic summaries
+- **Chat integration** - Process chat histories with LLM to extract memories
 - **LangGraph mode** - Native integration with LangGraph nodes
 - **MCP support** - Built-in Model Context Protocol server
 - **Health checks** - `/health` and `/stats` endpoints
+
+### Chat History Integration
+
+Process chat conversations with an LLM to automatically extract and store memories:
+
+```bash
+# Process chat history
+curl -X POST http://localhost:8080/api/chat/integrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "I prefer dark mode for coding"},
+      {"role": "assistant", "content": "Noted. Dark mode reduces eye strain."}
+    ],
+    "user_id": "user123"
+  }'
+
+# Get LLM configuration
+curl http://localhost:8080/api/chat/config
+```
+
+The LLM analyzes conversations and automatically classifies memories into appropriate sectors (episodic, semantic, procedural, emotional, reflective).
+
+**See [docs/CHAT_INTEGRATION.md](./docs/CHAT_INTEGRATION.md) for detailed documentation.**
 
 ### LangGraph Integration
 
