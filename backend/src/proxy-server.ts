@@ -1,8 +1,7 @@
 #!/usr/bin/env tsx
 
-import { get_proxy_instance } from "./server/proxy";
+import { mcp_proxy } from "./ai/mcp-proxy";
 import { env } from "./core/cfg";
-import { runMigration } from "./scripts/migrate-agent-tables";
 
 const server = require("./server/server.js");
 
@@ -22,10 +21,6 @@ async function startProxyServer() {
     console.log(`[CONFIG] Database: ${env.db_path}`);
 
     try {
-        // Run database migration to ensure agent tables exist
-        console.log("[MIGRATION] Running agent registration migration...");
-        await runMigration();
-
         // Create Express app
         const app = server({ max_payload_size: env.max_payload_size });
 
@@ -46,9 +41,6 @@ async function startProxyServer() {
             }
             next();
         });
-
-        // Initialize and get proxy instance
-        const proxy = get_proxy_instance();
         
         // Add proxy routes only
         const { proxy_routes } = await import("./server/proxy");
@@ -59,14 +51,12 @@ async function startProxyServer() {
             res.json({
                 service: "OpenMemory MCP Proxy",
                 mode: "standalone-proxy",
-                version: "1.0.0",
-                description: "Multi-agent namespace-aware MCP proxy for OpenMemory (Standalone Proxy Server)",
+                version: "2.0.0",
+                description: "Namespace-based MCP proxy for OpenMemory (Standalone Proxy Server)",
                 endpoints: {
                     mcp: "/mcp-proxy",
-                    agents: "/api/agents", 
                     namespaces: "/api/namespaces",
                     info: "/api/proxy-info",
-                    templates: "/api/registration-template",
                     health: "/api/proxy-health"
                 },
                 documentation: "See /api/proxy-info for detailed service information"

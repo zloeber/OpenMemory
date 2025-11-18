@@ -42,13 +42,11 @@ export function sys(app: any) {
                     service: "OpenMemory MCP Proxy",
                     mode: "proxy-only",
                     version: "2.0-hsg-tiered",
-                    description: "Multi-agent namespace-aware MCP proxy for OpenMemory (Proxy-Only Mode)",
+                    description: "Namespace-based MCP proxy for OpenMemory (Proxy-Only Mode)",
                     available_endpoints: {
                         mcp: "/mcp-proxy",
-                        agents: "/api/agents",
                         namespaces: "/api/namespaces",
                         proxy_info: "/api/proxy-info",
-                        templates: "/api/registration-template",
                         proxy_health: "/api/proxy-health",
                         health: "/health",
                         sectors: "/sectors",
@@ -72,7 +70,6 @@ export function sys(app: any) {
                         memory: "/api/memory",
                         ...(process.env.OM_MCP_PROXY_ENABLED !== 'false' ? {
                             mcp_proxy: "/mcp-proxy",
-                            agents: "/api/agents",
                             namespaces: "/api/namespaces"
                         } : {})
                     }
