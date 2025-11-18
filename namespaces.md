@@ -17,18 +17,20 @@ OpenMemory stores memories across multiple cognitive sectors within each namespa
 - **Procedural Memory**: Workflows, processes, steps
 - **Reflective Memory**: Reasoning, lessons learned
 - **Emotional Memory**: User feedback, sentiment
-- **Temporal Memory**: Time-based context and changes
+
+Additionally Knowledge Graphs (no encoding) supported as Temporal memories:
+- **Temporal Memory**: Time-based context and changes, knowledge graphs
 
 ## API Usage
 
-All memory operations require a `namespace` parameter:
+All memory operations require a `namespaces` parameter:
 
 ```json
 // Adding a memory
 POST /memory/add
 {
   "content": "Important fact to remember",
-  "namespace": ["project-alpha"],
+  "namespaces": ["project-alpha"],
   "tags": ["important"]
 }
 
