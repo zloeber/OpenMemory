@@ -28,7 +28,7 @@ All memory operations require a `namespace` parameter:
 POST /memory/add
 {
   "content": "Important fact to remember",
-  "namespace": "project-alpha",
+  "namespace": ["project-alpha"],
   "tags": ["important"]
 }
 
@@ -36,7 +36,7 @@ POST /memory/add
 POST /memory/query
 {
   "query": "What do I know about the project?",
-  "namespace": "project-alpha",
+  "namespaces": ["project-alpha"],
   "k": 5
 }
 
