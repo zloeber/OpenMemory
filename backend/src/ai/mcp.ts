@@ -80,7 +80,6 @@ export const create_mcp_srv = () => {
         {
             name: "openmemory-mcp",
             version: "2.1.0",
-            protocolVersion: "2025-06-18",
         },
         { capabilities: { tools: {}, resources: {}, logging: {} } },
     );
