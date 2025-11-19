@@ -38,8 +38,9 @@ const mkRoot = async (
     txt: string,
     ex: ExtractionResult,
     meta?: Record<string, unknown>,
-    user_id?: string | null,
+    namespaces?: string[],
 ) => {
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
     const sum = txt.length > 500 ? txt.slice(0, 500) + "..." : txt;
     const cnt = `[Document: ${ex.metadata.content_type.toUpperCase()}]\n\n${sum}\n\n[Full content split across ${Math.ceil(txt.length / SEC)} sections]`;
     const id = rid(),
@@ -64,7 +65,7 @@ const mkRoot = async (
             1.0,
             0.1,
             1,
-            user_id || null,
+            j(ns),
             null,
         );
         await transaction.commit();
@@ -82,7 +83,7 @@ const mkChild = async (
     tot: number,
     rid: string,
     meta?: Record<string, unknown>,
-    user_id?: string | null,
+    namespaces?: string[],
 ) => {
     const r = await add_hsg_memory(
         txt,
@@ -94,7 +95,7 @@ const mkChild = async (
             total_sections: tot,
             parent_id: rid,
         },
-        user_id || undefined,
+        namespaces,
     );
     return r.id;
 };
@@ -103,12 +104,13 @@ const link = async (
     rid: string,
     cid: string,
     idx: number,
-    user_id?: string | null,
+    namespaces?: string[],
 ) => {
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
     const ts = now();
     await transaction.begin();
     try {
-        await q.ins_waypoint.run(rid, cid, user_id || null, 1.0, ts, ts);
+        await q.ins_waypoint.run(rid, cid, j(ns), 1.0, ts, ts);
         await transaction.commit();
         console.log(
             `[INGEST] Linked: ${rid.slice(0, 8)} -> ${cid.slice(0, 8)} (section ${idx})`,
@@ -125,8 +127,9 @@ export async function ingestDocument(
     data: string | Buffer,
     meta?: Record<string, unknown>,
     cfg?: ingestion_cfg,
-    user_id?: string | null,
+    namespaces?: string[],
 ): Promise<IngestionResult> {
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
     const th = cfg?.lg_thresh || LG,
         sz = cfg?.sec_sz || SEC;
     const ex = await extractText(t, data);
@@ -143,7 +146,7 @@ export async function ingestDocument(
                 ingestion_strategy: "single",
                 ingested_at: now(),
             },
-            user_id || undefined,
+            ns,
         );
         return {
             root_memory_id: r.id,
@@ -162,7 +165,7 @@ export async function ingestDocument(
     const cids: string[] = [];
 
     try {
-        rid = await mkRoot(text, ex, meta, user_id);
+        rid = await mkRoot(text, ex, meta, ns);
         console.log(`[INGEST] Root memory created: ${rid}`);
         for (let i = 0; i < secs.length; i++) {
             try {
@@ -172,10 +175,10 @@ export async function ingestDocument(
                     secs.length,
                     rid,
                     meta,
-                    user_id,
+                    ns,
                 );
                 cids.push(cid);
-                await link(rid, cid, i, user_id);
+                await link(rid, cid, i, ns);
                 console.log(
                     `[INGEST] Section ${i + 1}/${secs.length} processed: ${cid}`,
                 );
@@ -207,8 +210,9 @@ export async function ingestURL(
     url: string,
     meta?: Record<string, unknown>,
     cfg?: ingestion_cfg,
-    user_id?: string | null,
+    namespaces?: string[],
 ): Promise<IngestionResult> {
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
     const { extractURL } = await import("./extract");
     const ex = await extractURL(url);
     const th = cfg?.lg_thresh || LG,
@@ -225,7 +229,7 @@ export async function ingestURL(
                 ingestion_strategy: "single",
                 ingested_at: now(),
             },
-            user_id || undefined,
+            ns,
         );
         return {
             root_memory_id: r.id,
@@ -244,7 +248,7 @@ export async function ingestURL(
     const cids: string[] = [];
 
     try {
-        rid = await mkRoot(ex.text, ex, { ...meta, source_url: url }, user_id);
+        rid = await mkRoot(ex.text, ex, { ...meta, source_url: url }, ns);
         console.log(`[INGEST] Root memory for URL: ${rid}`);
         for (let i = 0; i < secs.length; i++) {
             try {
@@ -254,10 +258,10 @@ export async function ingestURL(
                     secs.length,
                     rid,
                     { ...meta, source_url: url },
-                    user_id,
+                    ns,
                 );
                 cids.push(cid);
-                await link(rid, cid, i, user_id);
+                await link(rid, cid, i, ns);
                 console.log(
                     `[INGEST] URL section ${i + 1}/${secs.length} processed: ${cid}`,
                 );

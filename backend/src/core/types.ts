@@ -1,19 +1,21 @@
+export const DEFAULT_NAMESPACES = ["global"];
+
 export type add_req = {
     content: string;
+    namespaces?: string[];
     tags?: string[];
     metadata?: Record<string, unknown>;
     salience?: number;
     decay_lambda?: number;
-    user_id?: string;
 };
 export type q_req = {
     query: string;
+    namespaces?: string[];
     k?: number;
     filters?: {
         tags?: string[];
         min_score?: number;
         sector?: string;
-        user_id?: string;
     };
 };
 export type sector_type =
@@ -29,7 +31,7 @@ export type mem_row = {
     primary_sector: string;
     tags: string | null;
     meta: string | null;
-    user_id: string | null;
+    namespaces: string;  // JSON array of namespaces
     created_at: number;
     updated_at: number;
     last_seen_at: number;
@@ -44,16 +46,16 @@ export type ingest_req = {
     source: "file" | "link" | "connector";
     content_type: "pdf" | "docx" | "html" | "md" | "txt" | "audio";
     data: string;
+    namespaces?: string[];
     metadata?: Record<string, unknown>;
     config?: { force_root?: boolean; sec_sz?: number; lg_thresh?: number };
-    user_id?: string;
 };
 
 export type ingest_url_req = {
     url: string;
+    namespaces?: string[];
     metadata?: Record<string, unknown>;
     config?: { force_root?: boolean; sec_sz?: number; lg_thresh?: number };
-    user_id?: string;
 };
 
 export type lgm_store_req = {
@@ -133,8 +135,7 @@ export type chat_message = {
 
 export type chat_integration_req = {
     messages: chat_message[];
-    user_id?: string;
-    namespace?: string;
+    namespaces?: string[];
     model?: string;
     metadata?: Record<string, unknown>;
 };

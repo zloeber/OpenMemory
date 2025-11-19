@@ -1,0 +1,165 @@
+ontology:
+  name: "therapy_psychology_ontology"
+  version: "1.0"
+  domain: "psychology_therapy"
+  description: "Ontology for AI-assisted therapeutic interactions, psychological concepts, emotional states, and treatment processes."
+
+  metadata:
+    author: "system"
+    created: "2025-11-17"
+    modified: "2025-11-17"
+    source_standards:
+      - "DSM-5"
+      - "schema.org/Person"
+      - "ICD-11"
+
+  memory_mappings:
+    semantic: ["Person", "Therapist", "Diagnosis", "TreatmentPlan"]
+    episodic: ["Session", "LifeEvent"]
+    procedural: ["CopingStrategy", "TherapyTechnique"]
+    reflective: ["Insight", "CognitiveDistortion"]
+    emotional: ["Emotion", "Mood"]
+    temporal: ["MoodTrend", "SessionTimeline"]
+
+  entities:
+    - name: "Person"
+      description: "A client receiving therapy."
+      attributes:
+        - name: "name"
+          type: "string"
+          required: true
+        - name: "age"
+          type: "int"
+        - name: "gender"
+          type: "string"
+        - name: "presenting_problem"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Therapist"
+      description: "The therapy provider entity."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "credentials"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Emotion"
+      description: "Emotional state experienced by the client."
+      attributes:
+        - name: "type"
+          type: "string"
+          enum: ["sadness", "anger", "fear", "joy", "shame", "guilt", "calm"]
+        - name: "intensity"
+          type: "int"
+      memory_type: "emotional"
+
+    - name: "Mood"
+      description: "A general mood classification."
+      attributes:
+        - name: "label"
+          type: "string"
+          enum: ["depressed", "anxious", "neutral", "positive"]
+      memory_type: "emotional"
+
+    - name: "Session"
+      description: "A therapy session event."
+      attributes:
+        - name: "timestamp"
+          type: "datetime"
+        - name: "notes"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "LifeEvent"
+      description: "A significant event affecting mental health."
+      attributes:
+        - name: "description"
+          type: "string"
+        - name: "timestamp"
+          type: "datetime"
+      memory_type: "episodic"
+
+    - name: "Insight"
+      description: "A reflective insight or cognitive realization."
+      attributes:
+        - name: "content"
+          type: "string"
+        - name: "session_id"
+          type: "entity_ref"
+      memory_type: "reflective"
+
+    - name: "CognitiveDistortion"
+      description: "Recognized thinking pattern that may be unhelpful."
+      attributes:
+        - name: "type"
+          type: "string"
+        - name: "example"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "CopingStrategy"
+      description: "Actionable technique for emotional regulation."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "steps"
+          type: "string"
+      memory_type: "procedural"
+
+  relationships:
+    - name: "has_emotion"
+      description: "Person experiences an emotion."
+      from: "Person"
+      to: "Emotion"
+      type: "emotional"
+      cardinality: "1:N"
+      memory_type: "emotional"
+
+    - name: "had_session"
+      description: "Person participated in a therapy session."
+      from: "Person"
+      to: "Session"
+      type: "temporal"
+      cardinality: "1:N"
+      memory_type: "episodic"
+
+    - name: "discussed_event"
+      description: "A session covers a life event."
+      from: "Session"
+      to: "LifeEvent"
+      type: "association"
+      cardinality: "N:M"
+      memory_type: "episodic"
+
+    - name: "produced_insight"
+      description: "A session leads to a reflective insight."
+      from: "Session"
+      to: "Insight"
+      type: "causal"
+      cardinality: "1:N"
+      memory_type: "reflective"
+
+    - name: "applies_strategy"
+      description: "Person uses a coping strategy."
+      from: "Person"
+      to: "CopingStrategy"
+      type: "procedural"
+      cardinality: "N:M"
+      memory_type: "procedural"
+
+  rules:
+    inference:
+      - id: "infer_mood_trend"
+        description: "If multiple emotions of high intensity are recorded over time, infer a negative mood trend."
+        if:
+          - "Emotion.intensity > 7"
+        then:
+          - "create MoodTrend(label='negative')"
+
+    validation:
+      - id: "age_non_negative"
+        description: "Person age must be >= 0"
+        applies_to: "Person"
+        rule: "age >= 0"

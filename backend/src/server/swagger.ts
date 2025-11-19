@@ -26,6 +26,9 @@ export const swaggerSpec = {
             description: 'Development server',
         },
     ],
+    security: [
+        { apiKeyAuth: [] }
+    ],
     components: {
         securitySchemes: {
             bearerAuth: {
@@ -635,32 +638,35 @@ export const swaggerSpec = {
                 }
             }
         },
-        '/api/agents': {
+        '/api/namespaces': {
             get: {
-                summary: 'List registered agents',
-                description: 'Retrieve all registered MCP proxy agents and their configurations',
-                tags: ['Agents'],
+                summary: 'List all namespaces',
+                description: 'Retrieve all available namespaces and their configurations',
+                tags: ['Namespaces'],
                 responses: {
                     '200': {
-                        description: 'List of registered agents',
+                        description: 'List of namespaces',
                         content: {
                             'application/json': {
                                 schema: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            agent_id: { type: 'string', description: 'Unique agent identifier' },
-                                            namespace: { type: 'string', description: 'Primary namespace' },
-                                            permissions: { 
-                                                type: 'array', 
-                                                items: { type: 'string' },
-                                                description: 'Agent permissions'
-                                            },
-                                            description: { type: 'string', description: 'Agent description' },
-                                            created_at: { type: 'string', format: 'date-time' },
-                                            last_access: { type: 'string', format: 'date-time' }
-                                        }
+                                    type: 'object',
+                                    properties: {
+                                        namespaces: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    namespace: { type: 'string', description: 'Namespace identifier' },
+                                                    description: { type: 'string', description: 'Namespace description' },
+                                                    ontology_profile: { type: 'string', description: 'Optional ontology profile name' },
+                                                    metadata: { type: 'object', description: 'Optional metadata' },
+                                                    created_at: { type: 'string', format: 'date-time' },
+                                                    updated_at: { type: 'string', format: 'date-time' },
+                                                    active: { type: 'number' }
+                                                }
+                                            }
+                                        },
+                                        total: { type: 'number', description: 'Total number of namespaces' }
                                     }
                                 }
                             }
@@ -669,37 +675,33 @@ export const swaggerSpec = {
                 }
             },
             post: {
-                summary: 'Register new agent',
-                description: 'Register a new MCP proxy agent with namespace access. This endpoint is idempotent - calling it multiple times with the same agent_id will update the existing agent configuration and preserve the original API key.',
-                tags: ['Agents'],
+                summary: 'Create a new namespace',
+                description: 'Create a new namespace with optional ontology profile and metadata',
+                tags: ['Namespaces'],
                 requestBody: {
                     required: true,
                     content: {
                         'application/json': {
                             schema: {
                                 type: 'object',
-                                required: ['agent_id', 'namespace'],
+                                required: ['namespace'],
                                 properties: {
-                                    agent_id: { 
-                                        type: 'string', 
-                                        description: 'Unique identifier for the agent' 
-                                    },
                                     namespace: { 
                                         type: 'string', 
-                                        description: 'Primary namespace for agent memories' 
-                                    },
-                                    permissions: {
-                                        type: 'array',
-                                        items: { 
-                                            type: 'string',
-                                            enum: ['read', 'write', 'admin']
-                                        },
-                                        default: ['read', 'write'],
-                                        description: 'Permissions for the primary namespace'
+                                        description: 'Namespace identifier (alphanumeric, hyphens, underscores)',
+                                        pattern: '^[a-zA-Z0-9_-]+$'
                                     },
                                     description: { 
                                         type: 'string', 
-                                        description: 'Agent description for documentation' 
+                                        description: 'Namespace description' 
+                                    },
+                                    ontology_profile: { 
+                                        type: 'string', 
+                                        description: 'Ontology profile name (e.g., "default_agentic_memory_ontology")' 
+                                    },
+                                    metadata: { 
+                                        type: 'object', 
+                                        description: 'Additional metadata as key-value pairs' 
                                     }
                                 }
                             }
@@ -708,26 +710,27 @@ export const swaggerSpec = {
                 },
                 responses: {
                     '200': {
-                        description: 'Agent successfully registered or updated',
+                        description: 'Namespace created successfully',
                         content: {
                             'application/json': {
                                 schema: {
                                     type: 'object',
                                     properties: {
                                         success: { type: 'boolean' },
-                                        agent_id: { type: 'string' },
-                                        api_key: { type: 'string', description: 'API key (preserved if agent already exists)' },
                                         namespace: { type: 'string' },
-                                        permissions: { type: 'array', items: { type: 'string' } },
                                         description: { type: 'string' },
-                                        message: { type: 'string', description: 'Success message indicating if agent was registered or updated' }
+                                        ontology_profile: { type: 'string' },
+                                        metadata: { type: 'object' },
+                                        created_at: { type: 'string', format: 'date-time' },
+                                        updated_at: { type: 'string', format: 'date-time' },
+                                        message: { type: 'string' }
                                     }
                                 }
                             }
                         }
                     },
                     '400': {
-                        description: 'Invalid registration data',
+                        description: 'Invalid request',
                         content: {
                             'application/json': {
                                 schema: {
@@ -743,43 +746,42 @@ export const swaggerSpec = {
                 }
             }
         },
-        '/api/agents/{id}': {
+        '/api/namespaces/{namespace}': {
             get: {
-                summary: 'Get agent details',
-                description: 'Retrieve detailed information about a specific agent',
-                tags: ['Agents'],
+                summary: 'Get namespace details',
+                description: 'Retrieve detailed information about a specific namespace',
+                tags: ['Namespaces'],
                 parameters: [
                     {
                         in: 'path',
-                        name: 'id',
+                        name: 'namespace',
                         required: true,
                         schema: { type: 'string' },
-                        description: 'Agent ID'
+                        description: 'Namespace identifier'
                     }
                 ],
                 responses: {
                     '200': {
-                        description: 'Agent details',
+                        description: 'Namespace details',
                         content: {
                             'application/json': {
                                 schema: {
                                     type: 'object',
                                     properties: {
-                                        agent_id: { type: 'string' },
                                         namespace: { type: 'string' },
-                                        permissions: { type: 'array', items: { type: 'string' } },
-                                        shared_namespaces: { type: 'array', items: { type: 'string' } },
                                         description: { type: 'string' },
+                                        ontology_profile: { type: 'string' },
+                                        metadata: { type: 'object' },
                                         created_at: { type: 'string', format: 'date-time' },
-                                        last_access: { type: 'string', format: 'date-time' },
-                                        access_count: { type: 'number' }
+                                        updated_at: { type: 'string', format: 'date-time' },
+                                        active: { type: 'number' }
                                     }
                                 }
                             }
                         }
                     },
                     '404': {
-                        description: 'Agent not found',
+                        description: 'Namespace not found',
                         content: {
                             'application/json': {
                                 schema: {
@@ -792,37 +794,92 @@ export const swaggerSpec = {
                         }
                     }
                 }
-            }
-        },
-        '/api/namespaces': {
-            get: {
-                summary: 'List all namespaces',
-                description: 'Retrieve all available namespaces and their statistics',
+            },
+            put: {
+                summary: 'Update namespace',
+                description: 'Update namespace description, ontology profile, or metadata',
                 tags: ['Namespaces'],
+                parameters: [
+                    {
+                        in: 'path',
+                        name: 'namespace',
+                        required: true,
+                        schema: { type: 'string' },
+                        description: 'Namespace identifier'
+                    }
+                ],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    description: { type: 'string' },
+                                    ontology_profile: { type: 'string' },
+                                    metadata: { type: 'object' }
+                                }
+                            }
+                        }
+                    }
+                },
                 responses: {
                     '200': {
-                        description: 'List of namespaces',
+                        description: 'Namespace updated successfully',
                         content: {
                             'application/json': {
                                 schema: {
-                                    type: 'array',
-                                    items: {
-                                        type: 'object',
-                                        properties: {
-                                            name: { type: 'string', description: 'Namespace name' },
-                                            type: { 
-                                                type: 'string', 
-                                                enum: ['shared', 'private'],
-                                                description: 'Namespace type' 
-                                            },
-                                            memory_count: { type: 'number', description: 'Number of memories' },
-                                            agent_count: { type: 'number', description: 'Number of agents with access' },
-                                            description: { type: 'string', description: 'Namespace description' }
-                                        }
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean' },
+                                        namespace: { type: 'string' },
+                                        description: { type: 'string' },
+                                        ontology_profile: { type: 'string' },
+                                        metadata: { type: 'object' },
+                                        created_at: { type: 'string', format: 'date-time' },
+                                        updated_at: { type: 'string', format: 'date-time' },
+                                        message: { type: 'string' }
                                     }
                                 }
                             }
                         }
+                    },
+                    '404': {
+                        description: 'Namespace not found'
+                    }
+                }
+            },
+            delete: {
+                summary: 'Deactivate namespace',
+                description: 'Soft delete a namespace by setting it as inactive',
+                tags: ['Namespaces'],
+                parameters: [
+                    {
+                        in: 'path',
+                        name: 'namespace',
+                        required: true,
+                        schema: { type: 'string' },
+                        description: 'Namespace identifier'
+                    }
+                ],
+                responses: {
+                    '200': {
+                        description: 'Namespace deactivated successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean' },
+                                        namespace: { type: 'string' },
+                                        message: { type: 'string' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    '404': {
+                        description: 'Namespace not found'
                     }
                 }
             }
@@ -887,50 +944,6 @@ export const swaggerSpec = {
                                         database_status: { type: 'string' },
                                         active_connections: { type: 'number' }
                                     }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        '/api/registration-template/{format}': {
-            get: {
-                summary: 'Get registration template',
-                description: 'Retrieve agent registration template in specified format',
-                tags: ['Agents'],
-                parameters: [
-                    {
-                        in: 'path',
-                        name: 'format',
-                        required: true,
-                        schema: { 
-                            type: 'string',
-                            enum: ['json', 'curl', 'prompt', 'example']
-                        },
-                        description: 'Template format'
-                    }
-                ],
-                responses: {
-                    '200': {
-                        description: 'Registration template',
-                        content: {
-                            'application/json': {
-                                schema: {
-                                    type: 'object',
-                                    description: 'Template structure varies by format'
-                                }
-                            },
-                            'text/plain': {
-                                schema: {
-                                    type: 'string',
-                                    description: 'Template as text (for curl format)'
-                                }
-                            },
-                            'text/markdown': {
-                                schema: {
-                                    type: 'string',
-                                    description: 'Template as markdown (for example format)'
                                 }
                             }
                         }
@@ -1026,6 +1039,380 @@ export const swaggerSpec = {
                     }
                 }
             }
+        },
+        '/lgm/config': {
+            get: {
+                summary: 'Get LangGraph configuration',
+                description: 'Returns current LangGraph mode configuration and node-sector mappings',
+                tags: ['LangGraph'],
+                security: [{ apiKeyAuth: [] }],
+                responses: {
+                    '200': {
+                        description: 'LangGraph configuration',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        mode: { type: 'string', example: 'standard' },
+                                        namespace_default: { type: 'string', example: 'default' },
+                                        max_context: { type: 'integer', example: 50 },
+                                        reflective: { type: 'boolean', example: true },
+                                        node_sector_map: {
+                                            type: 'object',
+                                            properties: {
+                                                observe: { type: 'string', example: 'episodic' },
+                                                plan: { type: 'string', example: 'semantic' },
+                                                reflect: { type: 'string', example: 'reflective' },
+                                                act: { type: 'string', example: 'procedural' },
+                                                emotion: { type: 'string', example: 'emotional' }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/lgm/store': {
+            post: {
+                summary: 'Store LangGraph node memory',
+                description: 'Store memory from a LangGraph node execution',
+                tags: ['LangGraph'],
+                security: [{ apiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                required: ['node', 'content'],
+                                properties: {
+                                    node: { 
+                                        type: 'string',
+                                        enum: ['observe', 'plan', 'reflect', 'act', 'emotion'],
+                                        description: 'LangGraph node type'
+                                    },
+                                    content: { type: 'string', description: 'Memory content' },
+                                    namespace: { type: 'string', default: 'default' },
+                                    graph_id: { type: 'string', description: 'Graph session ID' },
+                                    metadata: { type: 'object', description: 'Additional metadata' }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    '200': {
+                        description: 'Memory stored successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        memory: { type: 'object' },
+                                        reflection: { type: 'object', nullable: true }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    '400': {
+                        description: 'Invalid request',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        err: { type: 'string' },
+                                        message: { type: 'string' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/lgm/retrieve': {
+            post: {
+                summary: 'Retrieve LangGraph node memories',
+                description: 'Retrieve memories for a specific LangGraph node',
+                tags: ['LangGraph'],
+                security: [{ apiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                required: ['node'],
+                                properties: {
+                                    node: { 
+                                        type: 'string',
+                                        enum: ['observe', 'plan', 'reflect', 'act', 'emotion']
+                                    },
+                                    namespace: { type: 'string', default: 'default' },
+                                    graph_id: { type: 'string' },
+                                    limit: { type: 'integer', default: 10 }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    '200': {
+                        description: 'Retrieved memories',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        memories: { 
+                                            type: 'array',
+                                            items: { type: 'object' }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/lgm/context': {
+            post: {
+                summary: 'Get LangGraph context',
+                description: 'Get aggregated context across all node types for a graph session',
+                tags: ['LangGraph'],
+                security: [{ apiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                required: ['graph_id'],
+                                properties: {
+                                    graph_id: { type: 'string' },
+                                    namespace: { type: 'string', default: 'default' },
+                                    limit: { type: 'integer', default: 50 }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    '200': {
+                        description: 'Aggregated context',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        episodic: { type: 'array', items: { type: 'object' } },
+                                        semantic: { type: 'array', items: { type: 'object' } },
+                                        procedural: { type: 'array', items: { type: 'object' } },
+                                        reflective: { type: 'array', items: { type: 'object' } },
+                                        emotional: { type: 'array', items: { type: 'object' } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/lgm/reflection': {
+            post: {
+                summary: 'Generate LangGraph reflection',
+                description: 'Generate a reflection memory from existing graph memories',
+                tags: ['LangGraph'],
+                security: [{ apiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                required: ['graph_id'],
+                                properties: {
+                                    graph_id: { type: 'string' },
+                                    namespace: { type: 'string', default: 'default' },
+                                    source_memories: { 
+                                        type: 'array',
+                                        items: { type: 'string' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    '200': {
+                        description: 'Generated reflection',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        reflection: { type: 'object' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/api/chat/integrate': {
+            post: {
+                summary: 'Process chat history',
+                description: 'Extract and store memories from chat conversation history',
+                tags: ['Chat'],
+                security: [{ apiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                required: ['messages'],
+                                properties: {
+                                    messages: {
+                                        type: 'array',
+                                        items: {
+                                            type: 'object',
+                                            required: ['role', 'content'],
+                                            properties: {
+                                                role: { 
+                                                    type: 'string',
+                                                    enum: ['user', 'assistant', 'system']
+                                                },
+                                                content: { type: 'string' }
+                                            }
+                                        }
+                                    },
+                                    namespaces: {
+                                        type: 'array',
+                                        items: { type: 'string' },
+                                        default: ['global']
+                                    },
+                                    model: { type: 'string', description: 'LLM model for extraction' }
+                                }
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    '200': {
+                        description: 'Chat processed successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean' },
+                                        memories_created: { type: 'integer' },
+                                        memories: { type: 'array', items: { type: 'object' } },
+                                        extracted: { type: 'object' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    '400': {
+                        description: 'Invalid request'
+                    },
+                    '500': {
+                        description: 'Processing error'
+                    }
+                }
+            }
+        },
+        '/api/chat/config': {
+            get: {
+                summary: 'Get chat LLM configuration',
+                description: 'Returns current LLM provider and model configuration for chat processing',
+                tags: ['Chat'],
+                security: [{ apiKeyAuth: [] }],
+                responses: {
+                    '200': {
+                        description: 'LLM configuration',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        provider: { type: 'string', enum: ['ollama', 'openai'] },
+                                        model: { type: 'string', example: 'llama3.2:latest' },
+                                        temperature: { type: 'number', example: 0.7 },
+                                        max_tokens: { type: 'integer', example: 2000 }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        '/api/metrics': {
+            get: {
+                summary: 'Get system metrics',
+                description: 'Returns namespace-level statistics and system metrics',
+                tags: ['Metrics'],
+                security: [{ apiKeyAuth: [] }],
+                parameters: [
+                    {
+                        name: 'namespace',
+                        in: 'query',
+                        schema: { type: 'string' },
+                        description: 'Filter metrics by namespace'
+                    }
+                ],
+                responses: {
+                    '200': {
+                        description: 'System metrics',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        timestamp: { type: 'string', format: 'date-time' },
+                                        service: { type: 'string' },
+                                        version: { type: 'string' },
+                                        architecture: { type: 'string' },
+                                        namespaces: {
+                                            type: 'object',
+                                            properties: {
+                                                total: { type: 'integer' },
+                                                active: { type: 'integer' }
+                                            }
+                                        },
+                                        memories: {
+                                            type: 'object',
+                                            properties: {
+                                                total: { type: 'integer' },
+                                                by_namespace: { type: 'object' },
+                                                by_sector: { type: 'object' }
+                                            }
+                                        },
+                                        embeddings: {
+                                            type: 'object',
+                                            properties: {
+                                                total: { type: 'integer' },
+                                                info: { type: 'object' }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     tags: [
@@ -1054,10 +1441,6 @@ export const swaggerSpec = {
             description: 'IDE integration features',
         },
         {
-            name: 'Agents',
-            description: 'MCP proxy agent registration and management',
-        },
-        {
             name: 'Namespaces',
             description: 'Namespace management for multi-agent isolation',
         },
@@ -1068,6 +1451,18 @@ export const swaggerSpec = {
         {
             name: 'MCP',
             description: 'Model Context Protocol endpoints',
+        },
+        {
+            name: 'LangGraph',
+            description: 'LangGraph workflow node memory management',
+        },
+        {
+            name: 'Chat',
+            description: 'Chat history processing and memory extraction',
+        },
+        {
+            name: 'Metrics',
+            description: 'System and namespace-level metrics',
         },
     ],
 };
@@ -1108,6 +1503,12 @@ export const setupSwagger = (app: any) => {
     <script src="https://unpkg.com/swagger-ui-dist@3.52.5/swagger-ui-standalone-preset.js"></script>
     <script>
         window.onload = function() {
+            // Get saved API key from localStorage
+            const savedApiKey = localStorage.getItem('swagger_apiKey') || '';
+            
+            // Store UI instance for requestInterceptor
+            let uiInstance = null;
+            
             const ui = SwaggerUIBundle({
                 url: '/openapi.json',
                 dom_id: '#swagger-ui',
@@ -1120,8 +1521,67 @@ export const setupSwagger = (app: any) => {
                     SwaggerUIBundle.plugins.DownloadUrl
                 ],
                 layout: "StandaloneLayout",
-                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch']
+                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+                persistAuthorization: true,
+                requestInterceptor: function(request) {
+                    // Try to get API key from Swagger's auth state
+                    let apiKey = null;
+                    
+                    try {
+                        if (uiInstance && uiInstance.auth) {
+                            const auth = uiInstance.auth();
+                            if (auth && auth.apiKeyAuth) {
+                                apiKey = auth.apiKeyAuth.value;
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore errors accessing auth state
+                    }
+                    
+                    // Fall back to localStorage
+                    if (!apiKey) {
+                        apiKey = localStorage.getItem('swagger_apiKey');
+                    }
+                    
+                    // Apply API key to request
+                    if (apiKey) {
+                        request.headers['x-api-key'] = apiKey;
+                        localStorage.setItem('swagger_apiKey', apiKey);
+                        console.log('[Swagger] API key applied to request');
+                    } else {
+                        console.warn('[Swagger] No API key - request will likely fail');
+                    }
+                    
+                    return request;
+                }
             });
+            
+            // Store UI instance after creation
+            uiInstance = ui;
+            window.ui = ui;
+            
+            // Auto-apply saved API key after UI loads
+            setTimeout(function() {
+                if (savedApiKey) {
+                    try {
+                        ui.preauthorizeApiKey('apiKeyAuth', savedApiKey);
+                        console.log('[Swagger] Auto-applied saved API key');
+                    } catch (e) {
+                        console.error('[Swagger] Failed to auto-apply API key:', e);
+                    }
+                }
+            }, 1000);
+            
+            // Add helpful message
+            setTimeout(function() {
+                const topbar = document.querySelector('.topbar');
+                if (topbar) {
+                    const helpText = document.createElement('div');
+                    helpText.style.cssText = 'padding: 10px; background: #ffc107; color: #000; text-align: center; font-size: 14px;';
+                    helpText.innerHTML = '🔑 <strong>Authentication Required:</strong> Click "Authorize" button (🔓) and enter API key: <code style="background:#fff;padding:2px 6px;border-radius:3px;">knickknacks</code> then click "Authorize" and "Close"';
+                    topbar.insertAdjacentElement('afterend', helpText);
+                }
+            }, 500);
         };
     </script>
 </body>

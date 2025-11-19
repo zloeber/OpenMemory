@@ -74,6 +74,7 @@ export async function GET() {
         if (masked.OM_API_KEY) masked.OM_API_KEY = '***'
         if (masked.OM_PG_PASSWORD) masked.OM_PG_PASSWORD = '***'
         if (masked.OM_WEAVIATE_API_KEY) masked.OM_WEAVIATE_API_KEY = '***'
+        if (masked.OM_QDRANT_API_KEY) masked.OM_QDRANT_API_KEY = '***'
         if (masked.NEXT_PUBLIC_API_KEY) masked.NEXT_PUBLIC_API_KEY = '***'
 
         return NextResponse.json({

@@ -42,6 +42,11 @@ async function startProxyServer() {
             next();
         });
         
+        // Add temporal API endpoints (always available)
+        const { temporal } = await import("./server/routes/temporal");
+        temporal(app);
+        console.log("[MCP PROXY] Temporal API endpoints: ENABLED");
+        
         // Add proxy routes only
         const { proxy_routes } = await import("./server/proxy");
         proxy_routes(app);
@@ -56,6 +61,7 @@ async function startProxyServer() {
                 endpoints: {
                     mcp: "/mcp-proxy",
                     namespaces: "/api/namespaces",
+                    temporal: "/api/temporal",
                     info: "/api/proxy-info",
                     health: "/api/proxy-health"
                 },

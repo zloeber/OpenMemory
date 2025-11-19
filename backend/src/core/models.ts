@@ -7,9 +7,9 @@ let cfg: model_cfg | null = null;
 
 export const load_models = (): model_cfg => {
     if (cfg) return cfg;
-    const p = join(__dirname, "../../../models.yml");
+    const p = join(__dirname, "../../config/models.yml");
     if (!existsSync(p)) {
-        console.warn("[MODELS] models.yml not found, using defaults");
+        console.warn(`[MODELS] ${p} not found, using defaults`);
         return get_defaults();
     }
     try {

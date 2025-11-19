@@ -14,7 +14,9 @@
         "start": "node dist/server/index.js",
         "proxy:start": "node dist/proxy-server.js",
         "migrate": "tsx src/migrate.ts",
-        "migrate:agents": "tsx src/scripts/migrate-agent-tables.ts"
+        "migrate:agents": "tsx src/scripts/migrate-agent-tables.ts",
+        "test": "tsx tests/api-endpoints.test.ts",
+        "test:all": "tsx tests/api-endpoints.test.ts"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.20.2",

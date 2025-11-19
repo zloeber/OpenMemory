@@ -44,12 +44,10 @@ type q_type = {
     upd_log: { run: (...p: any[]) => Promise<void> };
     get_pending_logs: { all: () => Promise<any[]> };
     get_failed_logs: { all: () => Promise<any[]> };
-    ins_user: { run: (...p: any[]) => Promise<void> };
-    get_user: { get: (user_id: string) => Promise<any> };
-    upd_user_summary: { run: (...p: any[]) => Promise<void> };
     // Namespace queries (simplified - no agent dependencies)
     ins_namespace: { run: (...p: any[]) => Promise<void> };
     upd_namespace: { run: (...p: any[]) => Promise<void> };
+    upd_namespace_full: { run: (...p: any[]) => Promise<void> };
     del_namespace: { run: (namespace: string) => Promise<void> };
     get_namespace: { get: (namespace: string) => Promise<any> };
     all_namespaces: { all: () => Promise<any[]> };
@@ -166,7 +164,7 @@ if (is_pg) {
             `create table if not exists ${l}(id text primary key,model text,status text,ts bigint,err text)`,
         );
         await pg.query(
-            `create table if not exists "${sc}"."openmemory_users"(user_id text primary key,summary text,reflection_count integer default 0,created_at bigint,updated_at bigint)`,
+            `create table if not exists "${sc}"."namespace_groups"(namespace text primary key,description text,created_at bigint not null default extract(epoch from now()),updated_at bigint not null default extract(epoch from now()),active integer not null default 1)`,
         );
         await pg.query(
             `create index if not exists openmemory_memories_sector_idx on ${m}(primary_sector)`,
@@ -185,6 +183,12 @@ if (is_pg) {
         );
         await pg.query(
             `create index if not exists openmemory_waypoints_user_idx on ${w}(user_id)`,
+        );
+        await pg.query(
+            `create index if not exists namespace_groups_created_at_idx on "${sc}"."namespace_groups"(created_at)`,
+        );
+        await pg.query(
+            `create index if not exists namespace_groups_active_idx on "${sc}"."namespace_groups"(active)`,
         );
         ready = true;
     };
@@ -413,32 +417,11 @@ if (is_pg) {
                     [user_id, limit, offset],
                 ),
         },
-        ins_user: {
-            run: (...p) =>
-                run_async(
-                    `insert into "${sc}"."openmemory_users"(user_id,summary,reflection_count,created_at,updated_at) values($1,$2,$3,$4,$5) on conflict(user_id) do update set summary=excluded.summary,reflection_count=excluded.reflection_count,updated_at=excluded.updated_at`,
-                    p,
-                ),
-        },
-        get_user: {
-            get: (user_id) =>
-                get_async(
-                    `select * from "${sc}"."openmemory_users" where user_id=$1`,
-                    [user_id],
-                ),
-        },
-        upd_user_summary: {
-            run: (...p) =>
-                run_async(
-                    `update "${sc}"."openmemory_users" set summary=$2,reflection_count=reflection_count+1,updated_at=$3 where user_id=$1`,
-                    p,
-                ),
-        },
         // Agent registration queries for PostgreSQL
         ins_namespace: {
             run: (...p) =>
                 run_async(
-                    `insert into "${sc}"."namespace_groups"(namespace,description,created_at,updated_at,active) values($1,$2,$3,$4,$5) on conflict(namespace) do update set description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
+                    `insert into "${sc}"."namespace_groups"(namespace,description,ontology_profile,metadata,created_at,updated_at,active) values($1,$2,$3,$4,$5,$6,$7) on conflict(namespace) do update set description=excluded.description,ontology_profile=excluded.ontology_profile,metadata=excluded.metadata,updated_at=excluded.updated_at,active=excluded.active`,
                     p,
                 ),
         },
@@ -446,6 +429,13 @@ if (is_pg) {
             run: (...p) =>
                 run_async(
                     `update "${sc}"."namespace_groups" set description=$2,updated_at=$3 where namespace=$1`,
+                    p,
+                ),
+        },
+        upd_namespace_full: {
+            run: (...p) =>
+                run_async(
+                    `update "${sc}"."namespace_groups" set description=$2,ontology_profile=$3,metadata=$4,updated_at=$5 where namespace=$1`,
                     p,
                 ),
         },
@@ -505,7 +495,7 @@ if (is_pg) {
             `create table if not exists embed_logs(id text primary key,model text,status text,ts integer,err text)`,
         );
         db.run(
-            `create table if not exists users(user_id text primary key,summary text,reflection_count integer default 0,created_at integer,updated_at integer)`,
+            `create table if not exists namespace_groups(namespace text primary key,description text,ontology_profile text,metadata text,created_at integer not null default (unixepoch()),updated_at integer not null default (unixepoch()),active integer not null default 1)`,
         );
         db.run(
             `create table if not exists stats(id integer primary key autoincrement,type text not null,count integer default 1,ts integer not null)`,
@@ -565,6 +555,12 @@ if (is_pg) {
         );
         db.run(
             "create index if not exists idx_edges_validity on temporal_edges(valid_from,valid_to)",
+        );
+        db.run(
+            "create index if not exists idx_namespace_groups_created_at on namespace_groups(created_at)",
+        );
+        db.run(
+            "create index if not exists idx_namespace_groups_active on namespace_groups(active)",
         );
     });
     memories_table = "memories";
@@ -789,29 +785,11 @@ if (is_pg) {
                     [user_id, limit, offset],
                 ),
         },
-        ins_user: {
-            run: (...p) =>
-                exec(
-                    "insert or replace into users(user_id,summary,reflection_count,created_at,updated_at) values(?,?,?,?,?)",
-                    p,
-                ),
-        },
-        get_user: {
-            get: (user_id) =>
-                one("select * from users where user_id=?", [user_id]),
-        },
-        upd_user_summary: {
-            run: (...p) =>
-                exec(
-                    "update users set summary=?,reflection_count=reflection_count+1,updated_at=? where user_id=?",
-                    p,
-                ),
-        },
         // Namespace queries for SQLite (simplified - no agent dependencies)
         ins_namespace: {
             run: (...p) =>
                 exec(
-                    "insert or replace into namespace_groups(namespace,description,created_at,updated_at,active) values(?,?,?,?,?)",
+                    "insert or replace into namespace_groups(namespace,description,ontology_profile,metadata,created_at,updated_at,active) values(?,?,?,?,?,?,?)",
                     p,
                 ),
         },
@@ -819,6 +797,13 @@ if (is_pg) {
             run: (...p) =>
                 exec(
                     "update namespace_groups set description=?,updated_at=? where namespace=?",
+                    p,
+                ),
+        },
+        upd_namespace_full: {
+            run: (...p) =>
+                exec(
+                    "update namespace_groups set description=?,ontology_profile=?,metadata=?,updated_at=? where namespace=?",
                     p,
                 ),
         },

@@ -70,27 +70,22 @@ export class OpenMemoryMCPProxy {
 
         // Namespaced memory operations
         this.srv.tool("query_memory",
-            "Query memories from a specific namespace",
+            "Query memories from specific namespace(s)",
             {
                 query: z.string().min(1).describe("Search query"),
-                namespace: z.string().min(1).describe("Target namespace (required)"),
+                namespaces: z.array(z.string()).optional().describe("Target namespaces (defaults to ['global'])"),
                 k: z.number().int().min(1).max(32).default(8).describe("Number of results to return"),
                 sector: sec_enum.optional().describe("Restrict search to a specific sector"),
                 min_salience: z.number().min(0).max(1).optional().describe("Minimum salience threshold")
             },
             async (params: any) => {
-                const { query, namespace, k, sector, min_salience } = params;
+                const { query, namespaces, k, sector, min_salience } = params;
                 
-                if (!namespace) {
-                    throw new Error("namespace is required for all memory operations");
-                }
+                const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
                 
-                // Auto-create namespace if it doesn't exist
-                await this.ensureNamespaceExists(namespace);
-
-                // Build filters with namespace as user_id
+                // Build filters with namespaces array
                 const filters = {
-                    user_id: namespace,
+                    namespaces: ns,
                     ...(sector ? { sectors: [sector as sector_type] } : {}),
                     ...(min_salience !== undefined ? { minSalience: min_salience } : {})
                 };
@@ -116,7 +111,7 @@ export class OpenMemoryMCPProxy {
                         { type: "text", text: summary }
                     ],
                     meta: {
-                        namespace,
+                        namespaces: ns,
                         total_results: matches.length,
                         results: payload
                     }
@@ -125,40 +120,35 @@ export class OpenMemoryMCPProxy {
         );
 
         this.srv.tool("store_memory",
-            "Store a memory in a namespace",
+            "Store a memory in namespace(s)",
             {
                 content: z.string().min(1).describe("Memory content to store"),
-                namespace: z.string().min(1).describe("Target namespace (required)"),
+                namespaces: z.array(z.string()).optional().describe("Target namespaces (defaults to ['global'])"),
                 sector: sec_enum.optional().describe("Memory sector classification"),
                 salience: z.number().min(0).max(1).optional().describe("Memory importance (0-1)"),
                 metadata: z.record(z.any()).optional().describe("Additional metadata")
             },
             async (params: any) => {
-                const { content, namespace, sector, salience, metadata } = params;
+                const { content, namespaces, sector, salience, metadata } = params;
                 
-                if (!namespace) {
-                    throw new Error("namespace is required for all memory operations");
-                }
-                
-                // Auto-create namespace if it doesn't exist
-                await this.ensureNamespaceExists(namespace);
+                const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
 
-                // Store memory using namespace as user_id
+                // Store memory with namespaces array
                 const memory = await add_hsg_memory(
                     content,
                     JSON.stringify([]),
                     metadata || {},
-                    namespace  // Use namespace as user_id
+                    ns
                 );
 
                 return {
                     content: [{
                         type: "text",
-                        text: `✅ Memory stored successfully\n\nID: ${memory.id}\nNamespace: ${namespace}\nPrimary Sector: ${memory.primary_sector}`
+                        text: `✅ Memory stored successfully\n\nID: ${memory.id}\nNamespaces: ${ns.join(', ')}\nPrimary Sector: ${memory.primary_sector}`
                     }],
                     meta: {
                         memory_id: memory.id,
-                        namespace,
+                        namespaces: ns,
                         primary_sector: memory.primary_sector
                     }
                 };

@@ -182,6 +182,9 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     ports:
       - '3000:3000'
     env_file:
@@ -190,8 +193,8 @@ services:
       # Dashboard Configuration
       - NODE_ENV=production
       - PORT=3000
-      # OpenMemory Backend URL - Points to main service
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://openmemory:8080}
+      # OpenMemory Backend URL - Must be accessible from browser (use localhost, not docker service name)
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       # Optional: API key if backend has authentication enabled
       - NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-}
       # Dashboard specific settings
