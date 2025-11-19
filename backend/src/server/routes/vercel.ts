@@ -11,7 +11,7 @@ export function vercel(app: any) {
             const k: number = Math.max(1, Math.min(32, Number(b.k) || 8));
             if (!query) return res.status(400).json({ err: "query" });
 
-            const matches = await hsg_query(query, k, { user_id });
+            const matches = await hsg_query(query, k, user_id ? { namespaces: [user_id] } : undefined);
             const lines = matches.map((m: any) => `- (${(m.score ?? 0).toFixed(2)}) ${m.content}`);
             const result = lines.join("\n");
 
@@ -44,7 +44,7 @@ export function vercel(app: any) {
             const metadata: any = b.metadata || undefined;
             if (!content) return res.status(400).json({ err: "content" });
 
-            const r = await add_hsg_memory(content, j(tags), metadata, user_id);
+            const r = await add_hsg_memory(content, j(tags), metadata, user_id ? [user_id] : undefined);
             res.json(r);
         } catch (e: any) {
             res.status(500).json({ err: "internal", msg: e?.message || String(e) });
