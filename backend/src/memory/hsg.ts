@@ -363,7 +363,7 @@ export async function create_cross_sector_waypoints(
     prim_id: string,
     prim_sec: string,
     add_secs: string[],
-    user_id?: string | null,
+    namespaces_json?: string | null,
 ): Promise<void> {
     const now = Date.now();
     const wt = 0.5;
@@ -371,7 +371,7 @@ export async function create_cross_sector_waypoints(
         await q.ins_waypoint.run(
             prim_id,
             `${prim_id}:${sec}`,
-            user_id || null,
+            namespaces_json || null,
             wt,
             now,
             now,
@@ -379,7 +379,7 @@ export async function create_cross_sector_waypoints(
         await q.ins_waypoint.run(
             `${prim_id}:${sec}`,
             prim_id,
-            user_id || null,
+            namespaces_json || null,
             wt,
             now,
             now,
@@ -417,14 +417,20 @@ export async function create_single_waypoint(
     new_id: string,
     new_mean: number[],
     ts: number,
-    user_id?: string | null,
+    namespaces_json?: string | null,
 ): Promise<void> {
     const thresh = 0.75;
-    const mems = user_id
-        ? await q.all_mem_by_user.all(user_id, 1000, 0)
-        : await q.all_mem.all(1000, 0);
+    const ns = namespaces_json ? JSON.parse(namespaces_json) : ["global"];
+    
+    // Query all memories, filter by namespace
+    const mems = await q.all_mem.all(1000, 0);
+    const filtered_mems = mems.filter(m => {
+        const mem_ns = JSON.parse(m.namespaces || '["global"]');
+        return ns.some((n: string) => mem_ns.includes(n));
+    });
+    
     let best: { id: string; similarity: number } | null = null;
-    for (const mem of mems) {
+    for (const mem of filtered_mems) {
         if (mem.id === new_id || !mem.mean_vec) continue;
         const ex_mean = buf_to_vec(mem.mean_vec);
         const sim = cos_sim(new Float32Array(new_mean), ex_mean);
@@ -436,13 +442,13 @@ export async function create_single_waypoint(
         await q.ins_waypoint.run(
             new_id,
             best.id,
-            user_id || null,
+            namespaces_json || null,
             best.similarity,
             ts,
             ts,
         );
     } else {
-        await q.ins_waypoint.run(new_id, new_id, user_id || null, 1.0, ts, ts);
+        await q.ins_waypoint.run(new_id, new_id, namespaces_json || null, 1.0, ts, ts);
     }
 }
 export async function create_inter_mem_waypoints(
@@ -450,7 +456,7 @@ export async function create_inter_mem_waypoints(
     prim_sec: string,
     new_vec: number[],
     ts: number,
-    user_id?: string | null,
+    namespaces_json?: string | null,
 ): Promise<void> {
     const thresh = 0.75;
     const wt = 0.5;
@@ -470,7 +476,7 @@ export async function create_inter_mem_waypoints(
             await q.ins_waypoint.run(
                 new_id,
                 vr.id,
-                user_id || null,
+                namespaces_json || null,
                 wt,
                 ts,
                 ts,
@@ -478,7 +484,7 @@ export async function create_inter_mem_waypoints(
             await q.ins_waypoint.run(
                 vr.id,
                 new_id,
-                user_id || null,
+                namespaces_json || null,
                 wt,
                 ts,
                 ts,
@@ -490,7 +496,7 @@ export async function create_contextual_waypoints(
     mem_id: string,
     rel_ids: string[],
     base_wt: number = 0.3,
-    user_id?: string | null,
+    namespaces_json?: string | null,
 ): Promise<void> {
     const now = Date.now();
     for (const rel_id of rel_ids) {
@@ -503,7 +509,7 @@ export async function create_contextual_waypoints(
             await q.ins_waypoint.run(
                 mem_id,
                 rel_id,
-                user_id || null,
+                namespaces_json || null,
                 base_wt,
                 now,
                 now,
@@ -677,7 +683,7 @@ const get_sal = async (id: string, def_sal: number): Promise<number> => {
 export async function hsg_query(
     qt: string,
     k = 10,
-    f?: { sectors?: string[]; minSalience?: number; user_id?: string },
+    f?: { sectors?: string[]; minSalience?: number; namespaces?: string[] },
 ): Promise<hsg_q_result[]> {
     if (active_queries >= env.max_active) {
         throw new Error(
@@ -715,10 +721,12 @@ export async function hsg_query(
         const vectorRepo = await VectorRepositoryFactory.getInstance();
         for (const s of ss) {
             const qv = qe[s];
+            // Search by first namespace if provided
+            const userId = f?.namespaces && f.namespaces.length > 0 ? f.namespaces[0] : undefined;
             const searchResults = await vectorRepo.search({
                 vector: new Float32Array(qv),
                 sector: s,
-                userId: f?.user_id,
+                userId,
                 limit: 1000,
                 withVectors: true,
             });
@@ -772,7 +780,14 @@ export async function hsg_query(
         for (const mid of Array.from(ids)) {
             const m = await q.get_mem.get(mid);
             if (!m || (f?.minSalience && m.salience < f.minSalience)) continue;
-            if (f?.user_id && m.user_id !== f.user_id) continue;
+            
+            // Check if memory belongs to any of the requested namespaces
+            if (f?.namespaces && f.namespaces.length > 0) {
+                const mem_namespaces = JSON.parse(m.namespaces || '["global"]');
+                const hasMatch = f.namespaces.some(ns => mem_namespaces.includes(ns));
+                if (!hasMatch) continue;
+            }
+
             const mvf = await calc_multi_vec_fusion_score(mid, qe, w);
             const csr = await calculateCrossSectorResonanceScore(
                 m.primary_sector,
@@ -930,7 +945,7 @@ export async function add_hsg_memory(
     content: string,
     tags?: string,
     metadata?: any,
-    user_id?: string,
+    namespaces?: string[],
 ): Promise<{
     id: string;
     primary_sector: string;
@@ -938,6 +953,10 @@ export async function add_hsg_memory(
     chunks?: number;
     deduplicated?: boolean;
 }> {
+    // Ensure namespaces defaults to ["global"]
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
+    const ns_json = JSON.stringify(ns);
+
     const simhash = compute_simhash(content);
     const existing = await q.get_mem_by_simhash.get(simhash);
     if (existing && hamming_dist(simhash, existing.simhash) <= 3) {
@@ -982,7 +1001,7 @@ export async function add_hsg_memory(
         );
         await q.ins_mem.run(
             id,
-            user_id || null,
+            ns_json, // Store namespaces as JSON array instead of user_id
             cur_seg,
             stored_content,
             simhash,
@@ -1008,14 +1027,16 @@ export async function add_hsg_memory(
         );
         const vectorRepo = await VectorRepositoryFactory.getInstance();
         for (const result of emb_res) {
+            // Store with first namespace for vector collection
             await vectorRepo.upsert({
                 id,
                 sector: result.sector,
-                userId: user_id || '',
+                userId: ns[0],
                 vector: new Float32Array(result.vector),
                 payload: {
                     dim: result.dim,
                     created_at: now,
+                    namespaces: ns,  // Store all namespaces in payload
                 },
             });
         }
@@ -1030,7 +1051,7 @@ export async function add_hsg_memory(
             await q.upd_compressed_vec.run(comp_buf, id);
         }
 
-        await create_single_waypoint(id, mean_vec, now, user_id);
+        await create_single_waypoint(id, mean_vec, now, ns_json);
         await transaction.commit();
         return {
             id,
@@ -1064,6 +1085,10 @@ export async function update_memory(
     const new_content = content !== undefined ? content : mem.content;
     const new_tags = tags !== undefined ? j(tags) : mem.tags || "[]";
     const new_meta = metadata !== undefined ? j(metadata) : mem.meta || "{}";
+    
+    // Parse namespaces from memory record
+    const mem_namespaces = JSON.parse(mem.namespaces || '["global"]');
+    
     await transaction.begin();
     try {
         if (content !== undefined && content !== mem.content) {
@@ -1086,11 +1111,12 @@ export async function update_memory(
                 await vectorRepo.upsert({
                     id,
                     sector: result.sector,
-                    userId: mem.user_id || '',
+                    userId: mem_namespaces[0] || 'global',
                     vector: new Float32Array(result.vector),
                     payload: {
                         dim: result.dim,
                         updated_at: Date.now(),
+                        namespaces: mem_namespaces,
                     },
                 });
             }

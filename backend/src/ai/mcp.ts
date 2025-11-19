@@ -31,7 +31,7 @@ const build_mem_snap = (row: mem_row) => ({
     primary_sector: row.primary_sector,
     salience: Number(row.salience.toFixed(3)),
     last_seen_at: row.last_seen_at,
-    user_id: row.user_id,
+    namespaces: JSON.parse(row.namespaces || '["global"]'),
     content_preview: trunc(row.content, 240),
 });
 
@@ -109,17 +109,15 @@ export const create_mcp_srv = () => {
                 .max(1)
                 .optional()
                 .describe("Minimum salience threshold"),
-            user_id: z
-                .string()
-                .trim()
-                .min(1)
+            namespaces: z
+                .array(z.string())
                 .optional()
-                .describe("Isolate results to a specific user identifier"),
+                .describe("Filter results to specific namespaces (defaults to ['global'])"),
         },
-        async ({ query, k, sector, min_salience, user_id }) => {
-            const u = uid(user_id);
+        async ({ query, k, sector, min_salience, namespaces }) => {
+            const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
             const flt =
-                sector || min_salience !== undefined || u
+                sector || min_salience !== undefined || ns
                     ? {
                           ...(sector
                               ? { sectors: [sector as sector_type] }
@@ -127,7 +125,7 @@ export const create_mcp_srv = () => {
                           ...(min_salience !== undefined
                               ? { minSalience: min_salience }
                               : {}),
-                          ...(u ? { user_id: u } : {}),
+                          namespaces: ns,
                       }
                     : undefined;
             const matches = await hsg_query(query, k ?? 8, flt);
@@ -149,7 +147,7 @@ export const create_mcp_srv = () => {
                     { type: "text", text: summ },
                     {
                         type: "text",
-                        text: JSON.stringify({ query, matches: pay }, null, 2),
+                        text: JSON.stringify({ query, namespaces: ns, matches: pay }, null, 2),
                     },
                 ],
             };
@@ -166,29 +164,27 @@ export const create_mcp_srv = () => {
                 .record(z.any())
                 .optional()
                 .describe("Arbitrary metadata blob"),
-            user_id: z
-                .string()
-                .trim()
-                .min(1)
+            namespaces: z
+                .array(z.string())
                 .optional()
                 .describe(
-                    "Associate the memory with a specific user identifier",
+                    "Associate the memory with specific namespaces (defaults to ['global'])",
                 ),
         },
-        async ({ content, tags, metadata, user_id }) => {
-            const u = uid(user_id);
+        async ({ content, tags, metadata, namespaces }) => {
+            const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
             const res = await add_hsg_memory(
                 content,
                 j(tags || []),
                 metadata,
-                u,
+                ns,
             );
-            const txt = `Stored memory ${res.id} (primary=${res.primary_sector}) across sectors: ${res.sectors.join(", ")}${u ? ` [user=${u}]` : ""}`;
+            const txt = `Stored memory ${res.id} (primary=${res.primary_sector}) across sectors: ${res.sectors.join(", ")} in namespaces: ${ns.join(", ")}`;
             const payload = {
                 id: res.id,
                 primary_sector: res.primary_sector,
                 sectors: res.sectors,
-                user_id: u ?? null,
+                namespaces: ns,
             };
             return {
                 content: [
@@ -238,26 +234,26 @@ export const create_mcp_srv = () => {
             sector: sec_enum
                 .optional()
                 .describe("Optionally limit to a sector"),
-            user_id: z
-                .string()
-                .trim()
-                .min(1)
+            namespaces: z
+                .array(z.string())
                 .optional()
-                .describe("Restrict results to a specific user identifier"),
+                .describe("Restrict results to specific namespaces (defaults to ['global'])"),
         },
-        async ({ limit, sector, user_id }) => {
-            const u = uid(user_id);
+        async ({ limit, sector, namespaces }) => {
+            const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
             let rows: mem_row[];
-            if (u) {
-                const all = await q.all_mem_by_user.all(u, limit ?? 10, 0);
-                rows = sector
-                    ? all.filter((row) => row.primary_sector === sector)
-                    : all;
-            } else {
-                rows = sector
-                    ? await q.all_mem_by_sector.all(sector, limit ?? 10, 0)
-                    : await q.all_mem.all(limit ?? 10, 0);
+            
+            // Get all memories and filter by namespace
+            const all = await q.all_mem.all(limit ?? 10, 0);
+            rows = all.filter((row) => {
+                const mem_ns = JSON.parse(row.namespaces || '["global"]');
+                return ns.some(n => mem_ns.includes(n));
+            });
+            
+            if (sector) {
+                rows = rows.filter((row) => row.primary_sector === sector);
             }
+            
             const items = rows.map((row) => ({
                 ...build_mem_snap(row),
                 tags: p(row.tags || "[]") as string[],
@@ -265,7 +261,7 @@ export const create_mcp_srv = () => {
             }));
             const lns = items.map(
                 (item, idx) =>
-                    `${idx + 1}. [${item.primary_sector}] salience=${item.salience} id=${item.id}${item.tags.length ? ` tags=${item.tags.join(", ")}` : ""}${item.user_id ? ` user=${item.user_id}` : ""}\n${item.content_preview}`,
+                    `${idx + 1}. [${item.primary_sector}] salience=${item.salience} id=${item.id}${item.tags.length ? ` tags=${item.tags.join(", ")}` : ""} namespaces=${item.namespaces.join(", ")}\n${item.content_preview}`,
             );
             return {
                 content: [
@@ -288,17 +284,15 @@ export const create_mcp_srv = () => {
                 .boolean()
                 .default(false)
                 .describe("Include sector vector metadata"),
-            user_id: z
-                .string()
-                .trim()
-                .min(1)
+            namespaces: z
+                .array(z.string())
                 .optional()
                 .describe(
-                    "Validate ownership against a specific user identifier",
+                    "Validate access against specific namespaces",
                 ),
         },
-        async ({ id, include_vectors, user_id }) => {
-            const u = uid(user_id);
+        async ({ id, include_vectors, namespaces }) => {
+            const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
             const mem = await q.get_mem.get(id);
             if (!mem)
                 return {
@@ -306,12 +300,17 @@ export const create_mcp_srv = () => {
                         { type: "text", text: `Memory ${id} not found.` },
                     ],
                 };
-            if (u && mem.user_id !== u)
+            
+            // Check namespace access
+            const mem_namespaces = JSON.parse(mem.namespaces || '["global"]');
+            const hasAccess = ns.some(n => mem_namespaces.includes(n));
+            
+            if (!hasAccess)
                 return {
                     content: [
                         {
                             type: "text",
-                            text: `Memory ${id} not found for user ${u}.`,
+                            text: `Memory ${id} not accessible in namespaces ${ns.join(", ")}.`,
                         },
                     ],
                 };
@@ -325,7 +324,7 @@ export const create_mcp_srv = () => {
                 created_at: mem.created_at,
                 updated_at: mem.updated_at,
                 last_seen_at: mem.last_seen_at,
-                user_id: mem.user_id,
+                namespaces: mem_namespaces,
                 tags: p(mem.tags || "[]"),
                 metadata: p(mem.meta || "{}"),
                 sectors: include_vectors

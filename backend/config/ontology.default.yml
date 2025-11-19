@@ -1,0 +1,178 @@
+ontology:
+  name: "default_agentic_memory_ontology"
+  version: "1.0"
+  domain: "general_agent_framework"
+  description: "A domain-agnostic ontology for agentic workloads, capturing tasks, actions, tools, events, reasoning, and user interactions."
+
+  metadata:
+    author: "system"
+    created: "2025-11-17"
+    modified: "2025-11-17"
+    source_standards:
+      - "schema.org"
+      - "W3C PROV"
+      - "OpenAI Open Memory Types"
+      - "autonomous agent design patterns"
+    notes: |
+      This ontology defines a neutral, general-purpose agentic knowledge graph.
+      Temporal rules describe how to turn normal memories into KG time-evolving edges & nodes.
+  entities:
+    - name: User
+      description: The human interacting with the AI.
+      attributes:
+        - preferences
+        - goals
+        - skills
+        - identity_tags
+    - name: Task
+      description: A definable unit of work the agent assists with.
+      attributes:
+        - description
+        - status
+        - priority
+    - name: Concept
+      description: A factual or abstract idea referenced in memory.
+      attributes:
+        - category
+        - description
+    - name: Tool
+      description: Any system, function, or capability the agent invokes.
+      attributes:
+        - name
+        - version
+        - purpose
+    - name: Strategy
+      description: Techniques or patterns used to solve problems.
+      attributes:
+        - purpose
+        - domain
+    - name: Event
+      description: A discrete episode, decision, or occurrence.
+      attributes:
+        - timestamp
+        - summary
+        - outcome
+
+  relationships:
+    - name: performs
+      from: User
+      to: Task
+      description: The user is doing or responsible for a task.
+    - name: assisted_by
+      from: Task
+      to: Strategy
+      description: A strategy the AI used to assist with a task.
+    - name: uses
+      from: Task
+      to: Tool
+      description: A tool invoked by the agent during a task.
+    - name: relates_to
+      from: Concept
+      to: Concept
+      description: A conceptual relationship (semantic).
+    - name: triggered
+      from: Event
+      to: Task
+      description: An event that caused work or change in a task.
+    - name: influenced
+      from: Strategy
+      to: Event
+      description: A strategy that caused or modified an outcome.
+
+  memory_mapping:
+    # Semantic memories map to Concepts, Tools, Strategies, Users, Tasks
+    semantic:
+      create_entities:
+        - Concept
+        - Tool
+        - Strategy
+      create_relationships:
+        - relates_to
+      entity_attribute_rules:
+        - pattern: "(?P<concept>[A-Za-z ]+?) is (a|an|the)"
+          entity: Concept
+          attribute: description
+
+    # Episodic memories generate Events with timestamps
+    episodic:
+      create_entities:
+        - Event
+      create_relationships:
+        - triggered
+        - influenced
+      entity_attribute_rules:
+        - pattern: "(?P<summary>.+)"
+          entity: Event
+          attribute: summary
+
+    # Procedural memories create Strategy and Tool relations
+    procedural:
+      create_entities:
+        - Strategy
+        - Tool
+      create_relationships:
+        - assisted_by
+        - uses
+
+    # Reflective memories tie Strategies and Tasks together
+    reflective:
+      create_entities:
+        - Strategy
+      create_relationships:
+        - influenced
+
+    # Emotional memories relate User ← emotion → concept/task if applicable
+    emotional:
+      create_entities:
+        - Concept
+      create_relationships:
+        - relates_to
+
+    # Temporal memories are not added directly, only processed
+    temporal:
+      note: Temporal memories derive from history across other memory types, not direct ingestion.
+
+  temporal_rules:
+    create_time_series:
+      # Any Event becomes a temporal node
+      - source_entity: Event
+        time_attribute: timestamp
+        versioning: true
+    infer_evolving_preferences:
+      # Detect patterns of preferences changing over time
+      pattern: "user (prefers|dislikes|likes|avoids) (?P<topic>[A-Za-z ]+)"
+      create_entity: Concept
+      create_relationship:
+        name: relates_to
+        from: User
+        to: Concept
+      temporal_dimension: preference_evolution
+
+    change_detection:
+      track_entities:
+        - Task
+        - Strategy
+      rules:
+        - if: "status changes"
+          create_event: "TaskStatusChanged"
+          link_via: triggered
+
+    recency_weighting:
+      half_life_days: 14
+      description: Recent events are weighted more heavily during retrieval.
+
+    trend_inference:
+      rules:
+        - detect: "increasing task failures"
+          create_entity: Concept
+          concept_name: "FailureTrend"
+          link: relates_to
+
+  extraction_patterns:
+    # These are used by the LLM or rule-based extractor
+    entities:
+      - pattern: "the user (?P<preference>likes|prefers|dislikes) (?P<object>[A-Za-z ]+)"
+        entity: Concept
+    relationships:
+      - pattern: "(?P<task>task [A-Za-z0-9_-]+) (uses|utilizes) (?P<tool>[A-Za-z ]+)"
+        relationship: uses

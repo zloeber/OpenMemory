@@ -1,6 +1,8 @@
+export const DEFAULT_NAMESPACES = ["global"];
+
 export type add_req = {
     content: string;
-    namespace: string;
+    namespaces?: string[];
     tags?: string[];
     metadata?: Record<string, unknown>;
     salience?: number;
@@ -8,7 +10,7 @@ export type add_req = {
 };
 export type q_req = {
     query: string;
-    namespace: string;
+    namespaces?: string[];
     k?: number;
     filters?: {
         tags?: string[];
@@ -29,7 +31,7 @@ export type mem_row = {
     primary_sector: string;
     tags: string | null;
     meta: string | null;
-    user_id: string | null;
+    namespaces: string;  // JSON array of namespaces
     created_at: number;
     updated_at: number;
     last_seen_at: number;
@@ -44,14 +46,14 @@ export type ingest_req = {
     source: "file" | "link" | "connector";
     content_type: "pdf" | "docx" | "html" | "md" | "txt" | "audio";
     data: string;
-    namespace: string;
+    namespaces?: string[];
     metadata?: Record<string, unknown>;
     config?: { force_root?: boolean; sec_sz?: number; lg_thresh?: number };
 };
 
 export type ingest_url_req = {
     url: string;
-    namespace: string;
+    namespaces?: string[];
     metadata?: Record<string, unknown>;
     config?: { force_root?: boolean; sec_sz?: number; lg_thresh?: number };
 };
@@ -133,7 +135,7 @@ export type chat_message = {
 
 export type chat_integration_req = {
     messages: chat_message[];
-    namespace: string;
+    namespaces?: string[];
     model?: string;
     metadata?: Record<string, unknown>;
 };

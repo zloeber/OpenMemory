@@ -47,6 +47,7 @@ type q_type = {
     // Namespace queries (simplified - no agent dependencies)
     ins_namespace: { run: (...p: any[]) => Promise<void> };
     upd_namespace: { run: (...p: any[]) => Promise<void> };
+    upd_namespace_full: { run: (...p: any[]) => Promise<void> };
     del_namespace: { run: (namespace: string) => Promise<void> };
     get_namespace: { get: (namespace: string) => Promise<any> };
     all_namespaces: { all: () => Promise<any[]> };
@@ -420,7 +421,7 @@ if (is_pg) {
         ins_namespace: {
             run: (...p) =>
                 run_async(
-                    `insert into "${sc}"."namespace_groups"(namespace,description,created_at,updated_at,active) values($1,$2,$3,$4,$5) on conflict(namespace) do update set description=excluded.description,updated_at=excluded.updated_at,active=excluded.active`,
+                    `insert into "${sc}"."namespace_groups"(namespace,description,ontology_profile,metadata,created_at,updated_at,active) values($1,$2,$3,$4,$5,$6,$7) on conflict(namespace) do update set description=excluded.description,ontology_profile=excluded.ontology_profile,metadata=excluded.metadata,updated_at=excluded.updated_at,active=excluded.active`,
                     p,
                 ),
         },
@@ -428,6 +429,13 @@ if (is_pg) {
             run: (...p) =>
                 run_async(
                     `update "${sc}"."namespace_groups" set description=$2,updated_at=$3 where namespace=$1`,
+                    p,
+                ),
+        },
+        upd_namespace_full: {
+            run: (...p) =>
+                run_async(
+                    `update "${sc}"."namespace_groups" set description=$2,ontology_profile=$3,metadata=$4,updated_at=$5 where namespace=$1`,
                     p,
                 ),
         },
@@ -487,7 +495,7 @@ if (is_pg) {
             `create table if not exists embed_logs(id text primary key,model text,status text,ts integer,err text)`,
         );
         db.run(
-            `create table if not exists namespace_groups(namespace text primary key,description text,created_at integer not null default (unixepoch()),updated_at integer not null default (unixepoch()),active integer not null default 1)`,
+            `create table if not exists namespace_groups(namespace text primary key,description text,ontology_profile text,metadata text,created_at integer not null default (unixepoch()),updated_at integer not null default (unixepoch()),active integer not null default 1)`,
         );
         db.run(
             `create table if not exists stats(id integer primary key autoincrement,type text not null,count integer default 1,ts integer not null)`,
@@ -781,7 +789,7 @@ if (is_pg) {
         ins_namespace: {
             run: (...p) =>
                 exec(
-                    "insert or replace into namespace_groups(namespace,description,created_at,updated_at,active) values(?,?,?,?,?)",
+                    "insert or replace into namespace_groups(namespace,description,ontology_profile,metadata,created_at,updated_at,active) values(?,?,?,?,?,?,?)",
                     p,
                 ),
         },
@@ -789,6 +797,13 @@ if (is_pg) {
             run: (...p) =>
                 exec(
                     "update namespace_groups set description=?,updated_at=? where namespace=?",
+                    p,
+                ),
+        },
+        upd_namespace_full: {
+            run: (...p) =>
+                exec(
+                    "update namespace_groups set description=?,ontology_profile=?,metadata=?,updated_at=? where namespace=?",
                     p,
                 ),
         },

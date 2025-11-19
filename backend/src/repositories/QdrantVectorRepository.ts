@@ -84,15 +84,15 @@ export class QdrantVectorRepository implements IVectorRepository {
       
       // Create payload indices for fast filtering
       await Promise.all([
-        this.client.createPayloadIndex(this.collectionName, {
+        this.client.createPayloadIndex(collectionName, {
           field_name: 'sector',
           field_schema: 'keyword',
         }),
-        this.client.createPayloadIndex(this.collectionName, {
+        this.client.createPayloadIndex(collectionName, {
           field_name: 'user_id',
           field_schema: 'keyword',
         }),
-        this.client.createPayloadIndex(this.collectionName, {
+        this.client.createPayloadIndex(collectionName, {
           field_name: 'memory_id',
           field_schema: 'keyword',
         }),
@@ -109,7 +109,7 @@ export class QdrantVectorRepository implements IVectorRepository {
     await this.initialize();
     const collectionName = await this.ensureCollection(options.userId);
     
-    const pointId = `${options.id}-${options.sector}`;
+    const pointId = options.id;
     
     await this.client.upsert(collectionName, {
       wait: true,
@@ -158,7 +158,7 @@ export class QdrantVectorRepository implements IVectorRepository {
         const batch = namespaceVectors.slice(i, i + batchSize);
       
         const points = batch.map(v => ({
-          id: `${v.id}-${v.sector}`,
+          id: v.id,
           vector: Array.from(v.vector),
           payload: {
             memory_id: v.id,
@@ -298,10 +298,9 @@ export class QdrantVectorRepository implements IVectorRepository {
     try {
       if (sector) {
         // Delete specific sector vector
-        const pointId = `${id}-${sector}`;
         await this.client.delete(collectionName, {
-        wait: true,
-        points: [pointId],
+          wait: true,
+          points: [id],
         });
       } else {
         // Delete all vectors for this memory
@@ -331,10 +330,9 @@ export class QdrantVectorRepository implements IVectorRepository {
     
     try {
       if (sector) {
-        const pointIds = ids.map(id => `${id}-${sector}`);
         await this.client.delete(collectionName, {
           wait: true,
-          points: pointIds,
+          points: ids,
         });
         return ids.length;
       } else {

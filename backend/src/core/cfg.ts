@@ -1,7 +1,14 @@
 import path from "path";
 import dotenv from "dotenv";
 
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+// Load .env from project root (handles both src and dist paths)
+const envPath = path.resolve(process.cwd(), "../.env");
+dotenv.config({ path: envPath });
+
+// Fallback: try loading from current working directory
+if (!process.env.OM_API_KEY) {
+    dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+}
 const num = (v: string | undefined, d: number) => Number(v) || d;
 const str = (v: string | undefined, d: string) => v || d;
 const bool = (v: string | undefined) => v === "true";

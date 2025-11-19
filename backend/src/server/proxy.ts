@@ -2,6 +2,13 @@ import type { IncomingMessage, ServerResponse } from "http";
 import { mcp_proxy } from "../ai/mcp-proxy";
 import { env } from "../core/cfg";
 import { q } from "../core/db";
+import { 
+    list_namespaces, 
+    get_namespace, 
+    create_namespace, 
+    update_namespace,
+    deactivate_namespace 
+} from "../services/namespace";
 
 /**
  * Middleware to enforce proxy-only mode
@@ -90,14 +97,9 @@ export const proxy_routes = (app: any) => {
     // REST endpoints for namespace management
     app.get("/api/namespaces", async (req: any, res: any) => {
         try {
-            const namespaces = await q.all_namespaces.all();
+            const namespaces = await list_namespaces();
             res.json({ 
-                namespaces: namespaces.map(ns => ({
-                    namespace: ns.namespace,
-                    description: ns.description,
-                    created_at: new Date(ns.created_at * 1000).toISOString(),
-                    updated_at: new Date(ns.updated_at * 1000).toISOString()
-                })), 
+                namespaces, 
                 total: namespaces.length 
             });
         } catch (error) {
@@ -111,18 +113,13 @@ export const proxy_routes = (app: any) => {
     app.get("/api/namespaces/:namespace", async (req: any, res: any) => {
         try {
             const { namespace } = req.params;
-            const ns = await q.get_namespace.get(namespace);
+            const ns = await get_namespace(namespace);
             
             if (!ns) {
                 return res.status(404).json({ error: "Namespace not found" });
             }
 
-            res.json({
-                namespace: ns.namespace,
-                description: ns.description,
-                created_at: new Date(ns.created_at * 1000).toISOString(),
-                updated_at: new Date(ns.updated_at * 1000).toISOString()
-            });
+            res.json(ns);
         } catch (error) {
             res.status(500).json({ 
                 error: "Failed to get namespace", 
@@ -133,7 +130,7 @@ export const proxy_routes = (app: any) => {
 
     app.post("/api/namespaces", async (req: any, res: any) => {
         try {
-            const { namespace, description = '' } = req.body;
+            const { namespace, description, ontology_profile, metadata } = req.body;
 
             // Validate required fields
             if (!namespace) {
@@ -143,29 +140,16 @@ export const proxy_routes = (app: any) => {
                 });
             }
 
-            // Validate namespace format
-            if (!/^[a-zA-Z0-9_-]+$/.test(namespace)) {
-                return res.status(400).json({ 
-                    error: "Invalid namespace", 
-                    message: "namespace must contain only alphanumeric characters, hyphens, and underscores" 
-                });
-            }
-
-            const now = Math.floor(Date.now() / 1000);
-
-            // Idempotent: insert or update
-            await q.ins_namespace.run(
+            const ns = await create_namespace({
                 namespace,
                 description,
-                now,
-                now,
-                1 // active
-            );
+                ontology_profile,
+                metadata
+            });
 
             res.json({
                 success: true,
-                namespace: namespace,
-                description: description,
+                ...ns,
                 message: `Namespace '${namespace}' created successfully`
             });
 
@@ -173,6 +157,40 @@ export const proxy_routes = (app: any) => {
             console.error('[NAMESPACE CREATE] Error:', error);
             res.status(500).json({ 
                 error: "Failed to create namespace", 
+                message: error instanceof Error ? error.message : String(error)
+            });
+        }
+    });
+
+    app.put("/api/namespaces/:namespace", async (req: any, res: any) => {
+        try {
+            const { namespace } = req.params;
+            const { description, ontology_profile, metadata } = req.body;
+
+            if (!namespace) {
+                return res.status(400).json({ 
+                    error: "Missing required fields", 
+                    message: "namespace is required" 
+                });
+            }
+
+            const ns = await update_namespace(namespace, {
+                description,
+                ontology_profile,
+                metadata
+            });
+
+            res.json({
+                success: true,
+                ...ns,
+                message: `Namespace '${namespace}' updated successfully`
+            });
+
+        } catch (error) {
+            console.error('[NAMESPACE UPDATE] Error:', error);
+            const status = error instanceof Error && error.message.includes('not found') ? 404 : 500;
+            res.status(status).json({ 
+                error: "Failed to update namespace", 
                 message: error instanceof Error ? error.message : String(error)
             });
         }
@@ -186,13 +204,7 @@ export const proxy_routes = (app: any) => {
         }
 
         try {
-            const ns = await q.get_namespace.get(namespace);
-            if (!ns) {
-                return res.status(404).json({ error: "Namespace not found" });
-            }
-
-            const now = Math.floor(Date.now() / 1000);
-            await q.deactivate_namespace.run(namespace, now);
+            await deactivate_namespace(namespace);
 
             res.json({
                 success: true,
@@ -201,7 +213,8 @@ export const proxy_routes = (app: any) => {
             });
         } catch (error) {
             console.error('[NAMESPACE DEACTIVATE] Error:', error);
-            res.status(500).json({
+            const status = error instanceof Error && error.message.includes('not found') ? 404 : 500;
+            res.status(status).json({
                 error: "Failed to deactivate namespace",
                 message: error instanceof Error ? error.message : String(error)
             });
@@ -210,7 +223,7 @@ export const proxy_routes = (app: any) => {
 
     app.get("/api/proxy-info", async (_req: any, res: any) => {
         try {
-            const namespaces = await q.all_namespaces.all();
+            const namespaces = await list_namespaces();
             
             res.json({
                 service: "OpenMemory MCP Proxy",

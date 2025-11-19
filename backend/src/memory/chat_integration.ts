@@ -11,9 +11,11 @@ import { add_hsg_memory } from "./hsg";
  */
 export async function process_chat_history(
     messages: chat_message[],
-    user_id?: string,
+    namespaces?: string[],
     model_override?: string,
 ): Promise<{ memories: any[]; extracted: extracted_memory[] }> {
+    const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
+    
     // Extract memories using LLM
     const extracted = await extract_memories_from_chat(messages, model_override);
 
@@ -25,7 +27,7 @@ export async function process_chat_history(
                 item.content,
                 item.tags ? JSON.stringify(item.tags) : "[]",
                 item.metadata || {},
-                user_id,
+                ns,
             );
             memories.push(memory);
         } catch (error: any) {

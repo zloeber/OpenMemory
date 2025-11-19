@@ -24,12 +24,6 @@ export function chat_routes(app: any) {
                 error: "messages array cannot be empty",
             });
         }
-        
-        if (!body?.namespace) {
-            return res.status(400).json({
-                error: "namespace is required",
-            });
-        }
 
         // Validate message format
         for (const msg of body.messages) {
@@ -46,13 +40,13 @@ export function chat_routes(app: any) {
         }
 
         try {
-            // Use namespace from body (now required)
-            const namespace = body.namespace;
+            // Use namespaces from body (defaults to ["global"])
+            const namespaces = body.namespaces && body.namespaces.length > 0 ? body.namespaces : ["global"];
 
             // Process chat history
             const result = await process_chat_history(
                 body.messages,
-                namespace,
+                namespaces,
                 body.model,
             );
 

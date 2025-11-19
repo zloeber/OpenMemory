@@ -5,7 +5,8 @@
  * Prepares OpenMemory for integration with external OIDC proxy layer
  */
 
-import { q } from "../../core/db";
+import { q } from '../../core/db';
+import { ensure_namespace_exists } from '../../services/namespace';
 
 /**
  * Validates namespace format (alphanumeric, hyphens, underscores only)
@@ -117,22 +118,9 @@ export async function ensure_namespace_exists_middleware(req: any, res: any, nex
     }
 
     try {
-        // Check if namespace exists
-        let ns = await q.get_namespace.get(namespace);
-
-        // If namespace doesn't exist, create it automatically
-        if (!ns) {
-            console.log(`[NAMESPACE] Auto-creating namespace: ${namespace}`);
-            const now = Math.floor(Date.now() / 1000);
-            
-            await q.ins_namespace.run(
-                namespace,
-                `Auto-created namespace: ${namespace}`,
-                now,
-                now,
-                1 // active
-            );
-
+        const result = await ensure_namespace_exists(namespace);
+        
+        if (result.created) {
             // Set flag to indicate namespace was created
             req.namespace_created = true;
         }

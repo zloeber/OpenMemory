@@ -22,15 +22,18 @@ export function mem(app: any) {
     app.post("/memory/add", async (req: any, res: any) => {
         const b = req.body as add_req;
         if (!b?.content) return res.status(400).json({ err: "content required" });
-        if (!b?.namespace) return res.status(400).json({ err: "namespace required" });
+        
+        // Default to ["global"] if no namespaces provided
+        const namespaces = b.namespaces && b.namespaces.length > 0 ? b.namespaces : ["global"];
+        
         try {
             const m = await add_hsg_memory(
                 b.content,
                 j(b.tags || []),
                 b.metadata,
-                b.namespace, // Pass namespace as user_id internally
+                namespaces,
             );
-            res.json(m);
+            res.json({ ...m, namespaces });
         } catch (e: any) {
             res.status(500).json({ err: e.message });
         }
@@ -40,15 +43,16 @@ export function mem(app: any) {
         const b = req.body as ingest_req;
         if (!b?.content_type || !b?.data)
             return res.status(400).json({ err: "missing content_type or data" });
-        if (!b?.namespace) 
-            return res.status(400).json({ err: "namespace required" });
+        
+        const namespaces = b.namespaces && b.namespaces.length > 0 ? b.namespaces : ["global"];
+        
         try {
             const r = await ingestDocument(
                 b.content_type,
                 b.data,
                 b.metadata,
                 b.config,
-                b.namespace, // Pass namespace as user_id internally
+                namespaces,
             );
             res.json(r);
         } catch (e: any) {
@@ -59,9 +63,11 @@ export function mem(app: any) {
     app.post("/memory/ingest/url", async (req: any, res: any) => {
         const b = req.body as ingest_url_req;
         if (!b?.url) return res.status(400).json({ err: "no_url" });
-        if (!b?.namespace) return res.status(400).json({ err: "namespace required" });
+        
+        const namespaces = b.namespaces && b.namespaces.length > 0 ? b.namespaces : ["global"];
+        
         try {
-            const r = await ingestURL(b.url, b.metadata, b.config, b.namespace);
+            const r = await ingestURL(b.url, b.metadata, b.config, namespaces);
             res.json(r);
         } catch (e: any) {
             res.status(500).json({ err: "url_fail", msg: e.message });
@@ -70,17 +76,19 @@ export function mem(app: any) {
 
     app.post("/memory/query", async (req: any, res: any) => {
         const b = req.body as q_req;
-        if (!b?.namespace) return res.status(400).json({ err: "namespace required" });
         const k = b.k || 8;
+        const namespaces = b.namespaces && b.namespaces.length > 0 ? b.namespaces : ["global"];
+        
         try {
             const f = {
                 sectors: b.filters?.sector ? [b.filters.sector] : undefined,
                 minSalience: b.filters?.min_score,
-                user_id: b.namespace, // Use namespace as user_id internally
+                namespaces,
             };
             const m = await hsg_query(b.query, k, f);
             res.json({
                 query: b.query,
+                namespaces,
                 matches: m.map((x: any) => ({
                     id: x.id,
                     content: x.content,
@@ -93,7 +101,7 @@ export function mem(app: any) {
                 })),
             });
         } catch (e: any) {
-            res.json({ query: b.query, matches: [] });
+            res.json({ query: b.query, namespaces, matches: [] });
         }
     });
 
@@ -114,17 +122,22 @@ export function mem(app: any) {
             content?: string;
             tags?: string[];
             metadata?: any;
-            namespace: string;
+            namespaces?: string[];
         };
         if (!id) return res.status(400).json({ err: "id required" });
-        if (!b?.namespace) return res.status(400).json({ err: "namespace required" });
+        
+        const check_namespaces = b.namespaces && b.namespaces.length > 0 ? b.namespaces : ["global"];
+        
         try {
             // Check if memory exists and namespace matches
             const m = await q.get_mem.get(id);
             if (!m) return res.status(404).json({ err: "not found" });
 
-            // Check namespace ownership
-            if (m.user_id !== b.namespace) {
+            // Check namespace ownership - parse namespaces from JSON
+            const mem_namespaces = JSON.parse(m.namespaces || '["global"]');
+            const hasAccess = check_namespaces.some(ns => mem_namespaces.includes(ns));
+            
+            if (!hasAccess) {
                 return res.status(403).json({ err: "forbidden: namespace mismatch" });
             }
 
@@ -141,24 +154,26 @@ export function mem(app: any) {
 
     app.get("/memory/all", async (req: any, res: any) => {
         try {
-            const namespace = req.query.namespace;
-            if (!namespace) {
-                return res.status(400).json({ err: "namespace required" });
-            }
+            const namespaces_param = req.query.namespaces;
+            const namespaces = namespaces_param 
+                ? (Array.isArray(namespaces_param) ? namespaces_param : [namespaces_param])
+                : ["global"];
             
             const u = req.query.u ? parseInt(req.query.u) : 0;
             const l = req.query.l ? parseInt(req.query.l) : 100;
             const s = req.query.sector;
 
-            let r;
+            // Get all memories and filter by namespace membership
+            let r = await q.all_mem.all(l, u);
+            
+            // Filter to only memories that belong to requested namespaces
+            r = r.filter((x: any) => {
+                const mem_ns = JSON.parse(x.namespaces || '["global"]');
+                return namespaces.some(ns => mem_ns.includes(ns));
+            });
+            
             if (s) {
-                // Filter by both namespace and sector
-                // Note: This will need a new query that filters by both
-                r = await q.all_mem_by_user.all(namespace, l, u);
                 r = r.filter((x: any) => x.primary_sector === s);
-            } else {
-                // Filter by namespace only
-                r = await q.all_mem_by_user.all(namespace, l, u);
             }
 
             const i = r.map((x: any) => ({
@@ -166,6 +181,7 @@ export function mem(app: any) {
                 content: x.content,
                 tags: p(x.tags),
                 metadata: p(x.meta),
+                namespaces: JSON.parse(x.namespaces || '["global"]'),
                 created_at: x.created_at,
                 updated_at: x.updated_at,
                 last_seen_at: x.last_seen_at,
@@ -174,7 +190,7 @@ export function mem(app: any) {
                 primary_sector: x.primary_sector,
                 version: x.version,
             }));
-            res.json({ items: i });
+            res.json({ items: i, namespaces });
         } catch (e: any) {
             res.status(500).json({ err: "internal" });
         }
@@ -183,17 +199,19 @@ export function mem(app: any) {
     app.get("/memory/:id", async (req: any, res: any) => {
         try {
             const id = req.params.id;
-            const namespace = req.query.namespace;
-            
-            if (!namespace) {
-                return res.status(400).json({ err: "namespace required" });
-            }
+            const namespaces_param = req.query.namespaces;
+            const check_namespaces = namespaces_param
+                ? (Array.isArray(namespaces_param) ? namespaces_param : [namespaces_param])
+                : ["global"];
             
             const m = await q.get_mem.get(id);
             if (!m) return res.status(404).json({ err: "not found" });
 
-            // Check namespace ownership
-            if (m.user_id !== namespace) {
+            // Check namespace access
+            const mem_namespaces = JSON.parse(m.namespaces || '["global"]');
+            const hasAccess = check_namespaces.some(ns => mem_namespaces.includes(ns));
+            
+            if (!hasAccess) {
                 return res.status(403).json({ err: "forbidden: namespace mismatch" });
             }
 
@@ -206,6 +224,7 @@ export function mem(app: any) {
                 sectors: sec,
                 tags: p(m.tags),
                 metadata: p(m.meta),
+                namespaces: mem_namespaces,
                 created_at: m.created_at,
                 updated_at: m.updated_at,
                 last_seen_at: m.last_seen_at,
@@ -221,17 +240,19 @@ export function mem(app: any) {
     app.delete("/memory/:id", async (req: any, res: any) => {
         try {
             const id = req.params.id;
-            const namespace = req.query.namespace || req.body.namespace;
-            
-            if (!namespace) {
-                return res.status(400).json({ err: "namespace required" });
-            }
+            const namespaces_param = req.query.namespaces || req.body.namespaces;
+            const check_namespaces = namespaces_param
+                ? (Array.isArray(namespaces_param) ? namespaces_param : [namespaces_param])
+                : ["global"];
             
             const m = await q.get_mem.get(id);
             if (!m) return res.status(404).json({ err: "not found" });
 
-            // Check namespace ownership
-            if (m.user_id !== namespace) {
+            // Check namespace access
+            const mem_namespaces = JSON.parse(m.namespaces || '["global"]');
+            const hasAccess = check_namespaces.some(ns => mem_namespaces.includes(ns));
+            
+            if (!hasAccess) {
                 return res.status(403).json({ err: "forbidden: namespace mismatch" });
             }
 
@@ -239,7 +260,7 @@ export function mem(app: any) {
             
             // Use vector repository for namespace-isolated deletion
             const vectorRepo = await VectorRepositoryFactory.getInstance();
-            await vectorRepo.delete(id, undefined, m.user_id);
+            await vectorRepo.delete(id, undefined, mem_namespaces[0]);
             
             await q.del_waypoints.run(id, id);
             res.json({ ok: true });
@@ -250,10 +271,10 @@ export function mem(app: any) {
 
     // GET endpoint to return the LLM prompt for intelligent memory classification
     app.get("/memory/ingest/intelligent/prompt", async (req: any, res: any) => {
-        const namespace = req.query.namespace;
-        if (!namespace) {
-            return res.status(400).json({ err: "namespace required" });
-        }
+        const namespaces_param = req.query.namespaces;
+        const namespaces = namespaces_param
+            ? (Array.isArray(namespaces_param) ? namespaces_param : [namespaces_param])
+            : ["global"];
 
         const prompt = build_intelligent_ingest_prompt();
         const endpoints = {
@@ -261,8 +282,8 @@ export function mem(app: any) {
                 method: "POST",
                 url: "/memory/add",
                 description: "Store in Hierarchical Semantic Graph (HSG) - episodic, semantic, procedural, emotional, or reflective memory",
-                required: ["content", "namespace"],
-                optional: ["tags", "metadata"],
+                required: ["content"],
+                optional: ["namespaces", "tags", "metadata"],
                 sectors: ["episodic", "semantic", "procedural", "emotional", "reflective"]
             },
             temporal_fact: {
@@ -275,7 +296,7 @@ export function mem(app: any) {
         };
 
         res.json({
-            namespace,
+            namespaces,
             prompt,
             endpoints,
             instructions: "Use the prompt to analyze content and determine the appropriate memory type and endpoint to call. The LLM should return a JSON response indicating which endpoint to use and with what parameters.",
@@ -284,7 +305,7 @@ export function mem(app: any) {
                 endpoint: "/memory/add",
                 params: {
                     content: "The meeting concluded with consensus on Q1 priorities",
-                    namespace: namespace,
+                    namespaces: namespaces,
                     tags: ["meeting", "Q1", "priorities"],
                     metadata: { sector: "episodic", confidence: 0.95 }
                 }
@@ -294,14 +315,13 @@ export function mem(app: any) {
 
     // POST endpoint that uses LLM to classify and route memory storage
     app.post("/memory/ingest/intelligent", async (req: any, res: any) => {
-        const { content, namespace, metadata } = req.body;
+        const { content, namespaces, metadata } = req.body;
         
         if (!content) {
             return res.status(400).json({ err: "content required" });
         }
-        if (!namespace) {
-            return res.status(400).json({ err: "namespace required" });
-        }
+        
+        const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
 
         try {
             // Use LLM to analyze content and determine memory type
@@ -313,9 +333,9 @@ export function mem(app: any) {
             for (const item of classification.items) {
                 try {
                     if (item.memory_type === "temporal_fact") {
-                        // Store as temporal fact
+                        // Store as temporal fact (temporal facts still use single namespace)
                         const fact_id = await insert_fact(
-                            namespace,
+                            ns[0],
                             item.subject,
                             item.predicate,
                             item.object,
@@ -341,7 +361,7 @@ export function mem(app: any) {
                                 sector: item.sector,
                                 source: "intelligent_ingest"
                             },
-                            namespace
+                            ns
                         );
                         results.push({
                             type: "hsg_memory",
@@ -361,7 +381,7 @@ export function mem(app: any) {
             }
 
             res.json({
-                namespace,
+                namespaces: ns,
                 classification_summary: classification.summary,
                 items_processed: results.length,
                 results,

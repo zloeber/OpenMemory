@@ -104,14 +104,18 @@ export default function memories() {
         }
     }
 
-    async function handleAddMemory(content: string, sector: string, tags: string) {
+    async function handleAddMemory(content: string, sector: string, tags: string, memNamespaces: string) {
         try {
+            const namespaceList = memNamespaces.split(',').map((ns) => ns.trim()).filter(Boolean)
+            if (namespaceList.length === 0) {
+                throw new Error('At least one namespace is required')
+            }
             const res = await fetch(`${API_BASE_URL}/memory/add`, {
                 method: 'POST',
                 headers: getHeaders(),
                 body: JSON.stringify({
                     content,
-                    namespace: namespace,
+                    namespaces: namespaceList,
                     tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
                     metadata: { sector: sector },
                 }),
@@ -385,10 +389,11 @@ export default function memories() {
     )
 }
 
-function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (content: string, sector: string, tags: string) => void }) {
+function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (content: string, sector: string, tags: string, namespaces: string) => void }) {
     const [content, setContent] = useState('')
     const [sector, setSector] = useState('semantic')
     const [tags, setTags] = useState('')
+    const [namespaces, setNamespaces] = useState('default')
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -402,6 +407,16 @@ function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (conte
                             onChange={(e) => setContent(e.target.value)}
                             className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300 min-h-32"
                             placeholder="Enter memory content..."
+                        />
+                    </div>
+                    <div>
+                        <label className="text-stone-400 text-sm mb-2 block">Namespaces (comma-separated)</label>
+                        <input
+                            type="text"
+                            value={namespaces}
+                            onChange={(e) => setNamespaces(e.target.value)}
+                            className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
+                            placeholder="default, project-a, team-alpha"
                         />
                     </div>
                     <div>
@@ -431,8 +446,8 @@ function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (conte
                 </div>
                 <div className="flex space-x-3 mt-6">
                     <button
-                        onClick={() => onAdd(content, sector, tags)}
-                        disabled={!content.trim()}
+                        onClick={() => onAdd(content, sector, tags, namespaces)}
+                        disabled={!content.trim() || !namespaces.trim()}
                         className="flex-1 rounded-xl p-2 bg-sky-500 hover:bg-sky-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Add Memory
