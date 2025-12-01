@@ -679,8 +679,8 @@ async function testSectorConfigPatch() {
     const originalConfig = await getResponse.json();
     const originalWeight = originalConfig.config.weight;
     
-    // Patch the weight
-    const newWeight = originalWeight + 0.1;
+    // Patch the weight with a predictable integer value to avoid float precision issues
+    const newWeight = 2.0;
     const response = await fetch(`${API_URL}/api/sectors/config/semantic`, {
         method: "PATCH",
         headers: getHeaders(),

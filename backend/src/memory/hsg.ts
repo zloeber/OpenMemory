@@ -50,12 +50,11 @@ export interface hsg_q_result {
     last_seen_at: number;
 }
 
-// Dynamic sector configuration - loaded from config/sectors.yml
-// Use get_sector_configs() to get current config (supports runtime updates)
-export const sector_configs: Record<string, sector_cfg> = get_sector_configs();
+// Re-export the dynamic getters and static exports from sectors module for backward compatibility
+// Note: sector_configs and sectors are snapshots at module load time - use get_sector_configs() 
+// and get_sectors() for runtime-aware access to configuration
+export { sector_configs, sectors } from "../core/sectors";
 
-// Dynamic sectors list - use get_sectors() for runtime-aware list
-export const sectors = get_sectors();
 export const scoring_weights = {
     similarity: 0.6,
     overlap: 0.2,

@@ -493,3 +493,8 @@ export function disable_file_watch(): void {
     file_watcher_enabled = false;
     console.log("[SECTORS] File watch disabled");
 }
+
+// Backward-compatible static exports (snapshot at module load time)
+// Note: For runtime-aware access, use get_sector_configs() and get_sectors()
+export const sector_configs: sectors_config = load_sectors();
+export const sectors: string[] = Object.keys(sector_configs);
