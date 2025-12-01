@@ -9,6 +9,7 @@ import { dash } from "./dashboard";
 import { metrics_routes } from "./metrics";
 import { chat_routes } from "./chat";
 import { vercel } from "./vercel";
+import { data_routes } from "./data";
 
 export function routes(app: any) {
     sys(app);
@@ -22,5 +23,6 @@ export function routes(app: any) {
     metrics_routes(app);
     chat_routes(app);
     vercel(app);
+    data_routes(app);
 }
 

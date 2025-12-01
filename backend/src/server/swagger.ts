@@ -398,7 +398,7 @@ export const swaggerSpec = {
         '/memory/all': {
             get: {
                 summary: 'Get all memories',
-                description: 'Retrieve all stored memories with optional pagination',
+                description: 'Retrieve all stored memories with optional pagination and namespace filtering',
                 tags: ['Memory'],
                 security: [
                     { bearerAuth: [] },
@@ -407,15 +407,37 @@ export const swaggerSpec = {
                 parameters: [
                     {
                         in: 'query',
-                        name: 'offset',
-                        schema: { type: 'integer', minimum: 0, default: 0 },
-                        description: 'Number of memories to skip'
+                        name: 'namespaces',
+                        schema: { 
+                            type: 'array',
+                            items: { type: 'string' },
+                            default: ['global']
+                        },
+                        description: 'List of namespaces to query (defaults to ["global"]). Can be a single namespace or comma-separated list.',
+                        required: false,
+                        explode: false
                     },
                     {
                         in: 'query',
-                        name: 'limit',
+                        name: 'u',
+                        schema: { type: 'integer', minimum: 0, default: 0 },
+                        description: 'Offset - number of memories to skip'
+                    },
+                    {
+                        in: 'query',
+                        name: 'l',
                         schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 },
-                        description: 'Maximum number of memories to return'
+                        description: 'Limit - maximum number of memories to return'
+                    },
+                    {
+                        in: 'query',
+                        name: 'sector',
+                        schema: { 
+                            type: 'string',
+                            enum: ['episodic', 'semantic', 'procedural', 'emotional', 'reflective']
+                        },
+                        description: 'Filter by memory sector',
+                        required: false
                     }
                 ],
                 responses: {
@@ -424,8 +446,18 @@ export const swaggerSpec = {
                         content: {
                             'application/json': {
                                 schema: {
-                                    type: 'array',
-                                    items: { $ref: '#/components/schemas/Memory' }
+                                    type: 'object',
+                                    properties: {
+                                        items: {
+                                            type: 'array',
+                                            items: { $ref: '#/components/schemas/Memory' }
+                                        },
+                                        namespaces: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                            description: 'The namespaces queried'
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1413,6 +1445,150 @@ export const swaggerSpec = {
                     }
                 }
             }
+        },
+        '/dashboard/stats': {
+            get: {
+                summary: 'Get dashboard statistics',
+                description: 'Returns comprehensive dashboard metrics including QPS stats, decay stats, system resource usage, and request tracking for internal monitoring',
+                tags: ['Dashboard'],
+                security: [{ apiKeyAuth: [] }],
+                responses: {
+                    '200': {
+                        description: 'Dashboard statistics',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        totalMemories: { type: 'integer', description: 'Total number of memories' },
+                                        recentMemories: { type: 'integer', description: 'Memories created in last 24 hours' },
+                                        sectorCounts: {
+                                            type: 'object',
+                                            description: 'Memory counts by sector',
+                                            additionalProperties: { type: 'integer' }
+                                        },
+                                        avgSalience: { type: 'string', description: 'Average memory salience' },
+                                        decayStats: {
+                                            type: 'object',
+                                            properties: {
+                                                total: { type: 'integer', description: 'Total memories with decay' },
+                                                avgLambda: { type: 'string', description: 'Average decay lambda' },
+                                                minSalience: { type: 'string', description: 'Minimum salience value' },
+                                                maxSalience: { type: 'string', description: 'Maximum salience value' }
+                                            }
+                                        },
+                                        requests: {
+                                            type: 'object',
+                                            properties: {
+                                                total: { type: 'integer', description: 'Total requests in last hour' },
+                                                errors: { type: 'integer', description: 'Total errors in last hour' },
+                                                errorRate: { type: 'string', description: 'Error rate percentage' },
+                                                lastHour: { type: 'integer', description: 'Number of QPS data points' }
+                                            }
+                                        },
+                                        qps: {
+                                            type: 'object',
+                                            properties: {
+                                                peak: { type: 'number', description: 'Peak queries per second' },
+                                                average: { type: 'number', description: 'Average queries per second' },
+                                                cacheHitRate: { type: 'integer', description: 'Cache hit rate percentage' }
+                                            }
+                                        },
+                                        system: {
+                                            type: 'object',
+                                            properties: {
+                                                memoryUsage: { type: 'integer', description: 'Memory usage percentage' },
+                                                heapUsed: { type: 'number', description: 'Heap used in MB' },
+                                                heapTotal: { type: 'number', description: 'Total heap in MB' },
+                                                uptime: {
+                                                    type: 'object',
+                                                    properties: {
+                                                        seconds: { type: 'integer' },
+                                                        days: { type: 'integer' },
+                                                        hours: { type: 'integer' }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        config: {
+                                            type: 'object',
+                                            properties: {
+                                                port: { type: 'integer', description: 'Server port' },
+                                                vecDim: { type: 'integer', description: 'Vector dimension' },
+                                                cacheSegments: { type: 'integer', description: 'Cache segments' },
+                                                maxActive: { type: 'integer', description: 'Max active memories' },
+                                                decayInterval: { type: 'integer', description: 'Decay interval in minutes' },
+                                                embedProvider: { type: 'string', description: 'Embedding provider' }
+                                            }
+                                        }
+                                    }
+                                },
+                                example: {
+                                    totalMemories: 1523,
+                                    recentMemories: 45,
+                                    sectorCounts: {
+                                        semantic: 612,
+                                        episodic: 423,
+                                        procedural: 234,
+                                        emotional: 156,
+                                        reflective: 98
+                                    },
+                                    avgSalience: "0.758",
+                                    decayStats: {
+                                        total: 1523,
+                                        avgLambda: "0.023",
+                                        minSalience: "0.123",
+                                        maxSalience: "0.987"
+                                    },
+                                    requests: {
+                                        total: 1245,
+                                        errors: 12,
+                                        errorRate: "0.96",
+                                        lastHour: 60
+                                    },
+                                    qps: {
+                                        peak: 45.3,
+                                        average: 23.7,
+                                        cacheHitRate: 87
+                                    },
+                                    system: {
+                                        memoryUsage: 45,
+                                        heapUsed: 461.5,
+                                        heapTotal: 1024,
+                                        uptime: {
+                                            seconds: 345678,
+                                            days: 4,
+                                            hours: 0
+                                        }
+                                    },
+                                    config: {
+                                        port: 3100,
+                                        vecDim: 256,
+                                        cacheSegments: 3,
+                                        maxActive: 1000,
+                                        decayInterval: 60,
+                                        embedProvider: "ollama"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    '500': {
+                        description: 'Internal server error',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        err: { type: 'string' },
+                                        message: { type: 'string' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     tags: [
@@ -1463,6 +1639,10 @@ export const swaggerSpec = {
         {
             name: 'Metrics',
             description: 'System and namespace-level metrics',
+        },
+        {
+            name: 'Dashboard',
+            description: 'Internal dashboard monitoring and statistics',
         },
     ],
 };

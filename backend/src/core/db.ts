@@ -501,10 +501,10 @@ if (is_pg) {
             `create table if not exists stats(id integer primary key autoincrement,type text not null,count integer default 1,ts integer not null)`,
         );
         db.run(
-            `create table if not exists temporal_facts(id text primary key,subject text not null,predicate text not null,object text not null,valid_from integer not null,valid_to integer,confidence real not null check(confidence >= 0 and confidence <= 1),last_updated integer not null,metadata text,unique(subject,predicate,object,valid_from))`,
+            `create table if not exists temporal_facts(id text primary key,namespace text not null default 'default',subject text not null,predicate text not null,object text not null,valid_from integer not null,valid_to integer,confidence real not null check(confidence >= 0 and confidence <= 1),last_updated integer not null,metadata text,unique(namespace,subject,predicate,object,valid_from))`,
         );
         db.run(
-            `create table if not exists temporal_edges(id text primary key,source_id text not null,target_id text not null,relation_type text not null,valid_from integer not null,valid_to integer,weight real not null,metadata text,foreign key(source_id) references temporal_facts(id),foreign key(target_id) references temporal_facts(id))`,
+            `create table if not exists temporal_edges(id text primary key,namespace text not null default 'default',source_id text not null,target_id text not null,relation_type text not null,valid_from integer not null,valid_to integer,weight real not null,metadata text,foreign key(source_id) references temporal_facts(id),foreign key(target_id) references temporal_facts(id))`,
         );
         db.run(
             "create index if not exists idx_memories_sector on memories(primary_sector)",
@@ -536,6 +536,9 @@ if (is_pg) {
         db.run("create index if not exists idx_stats_ts on stats(ts)");
         db.run("create index if not exists idx_stats_type on stats(type)");
         db.run(
+            "create index if not exists idx_temporal_namespace on temporal_facts(namespace)",
+        );
+        db.run(
             "create index if not exists idx_temporal_subject on temporal_facts(subject)",
         );
         db.run(
@@ -545,7 +548,7 @@ if (is_pg) {
             "create index if not exists idx_temporal_validity on temporal_facts(valid_from,valid_to)",
         );
         db.run(
-            "create index if not exists idx_temporal_composite on temporal_facts(subject,predicate,valid_from,valid_to)",
+            "create index if not exists idx_temporal_composite on temporal_facts(namespace,subject,predicate,valid_from,valid_to)",
         );
         db.run(
             "create index if not exists idx_edges_source on temporal_edges(source_id)",

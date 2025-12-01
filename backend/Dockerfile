@@ -25,6 +25,7 @@ RUN bun install --concurrent-scripts=10 --network-concurrency=96
 
 # Copy source code and migrations
 COPY src/ ./src/
+COPY config/ ./config/
 COPY migrations/ ./migrations/
 COPY tsconfig.json ./
 RUN bun run build
@@ -47,8 +48,8 @@ RUN addgroup -g 1001 -S appgroup \
 COPY --from=builder /app/node_modules ./node_modules/
 COPY --from=builder /app/dist ./dist/
 COPY --from=builder /app/migrations ./migrations/
+COPY --from=builder /app/config ./config/
 COPY package.json ./
-COPY ./config ./
 
 # Create a directory for persistent data and secure file permissions
 RUN mkdir -p /data \

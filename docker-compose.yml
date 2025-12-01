@@ -168,8 +168,8 @@ services:
       - OM_KEYWORD_BOOST=${OM_KEYWORD_BOOST:-2.5}
       - OM_KEYWORD_MIN_LENGTH=${OM_KEYWORD_MIN_LENGTH:-3}
       - OM_PROXY_ONLY_MODE=${OM_PROXY_ONLY_MODE:-true}
-
     volumes:
+      #- ./data/sqlite:/data
       - openmemory_data:/data
     depends_on:
       qdrant:

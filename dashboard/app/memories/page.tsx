@@ -37,7 +37,7 @@ export default function memories() {
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [editingMem, setEditingMem] = useState<mem | null>(null)
     const [deletingMemId, setDeletingMemId] = useState<string | null>(null)
-    const [namespace, setNamespace] = useState("default")
+    const [namespace, setNamespace] = useState("global")
 
     const hasApiKey = Boolean((process.env.NEXT_PUBLIC_API_KEY || "").trim())
     const limit = 1000
@@ -104,22 +104,53 @@ export default function memories() {
         }
     }
 
-    async function handleAddMemory(content: string, sector: string, tags: string, memNamespaces: string) {
+    async function handleAddMemory(
+        content: string, 
+        sector: string, 
+        tags: string, 
+        memNamespaces: string,
+        useLangGraph: boolean,
+        lgNode?: string,
+        graphId?: string
+    ) {
         try {
             const namespaceList = memNamespaces.split(',').map((ns) => ns.trim()).filter(Boolean)
             if (namespaceList.length === 0) {
                 throw new Error('At least one namespace is required')
             }
-            const res = await fetch(`${API_BASE_URL}/memory/add`, {
-                method: 'POST',
-                headers: getHeaders(),
-                body: JSON.stringify({
-                    content,
-                    namespaces: namespaceList,
-                    tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-                    metadata: { sector: sector },
-                }),
-            })
+
+            let res;
+            if (useLangGraph) {
+                // Use LangGraph endpoint
+                if (!lgNode) {
+                    throw new Error('LangGraph node type is required')
+                }
+                res = await fetch(`${API_BASE_URL}/lgm/store`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        node: lgNode,
+                        content,
+                        namespace: namespaceList[0], // LangGraph uses single namespace
+                        graph_id: graphId || undefined,
+                        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+                        metadata: { sector: sector },
+                    }),
+                })
+            } else {
+                // Use standard memory endpoint
+                res = await fetch(`${API_BASE_URL}/memory/add`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        content,
+                        namespaces: namespaceList,
+                        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+                        metadata: { sector: sector },
+                    }),
+                })
+            }
+            
             if (!res.ok) throw new Error('failed to add memory')
             setShowAddModal(false)
             fetchMems()
@@ -185,7 +216,7 @@ export default function memories() {
                             value={namespace}
                             onChange={(e) => setNamespace(e.target.value)}
                             className="bg-stone-900 text-white px-3 py-1 rounded-lg border border-stone-700 focus:border-sky-500 focus:outline-none"
-                            placeholder="default"
+                            placeholder="global"
                         />
                     </div>
                 </div>
@@ -389,17 +420,49 @@ export default function memories() {
     )
 }
 
-function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (content: string, sector: string, tags: string, namespaces: string) => void }) {
+function AddMemoryModal({ 
+    onClose, 
+    onAdd 
+}: { 
+    onClose: () => void; 
+    onAdd: (
+        content: string, 
+        sector: string, 
+        tags: string, 
+        namespaces: string, 
+        useLangGraph: boolean, 
+        lgNode?: string, 
+        graphId?: string
+    ) => void 
+}) {
     const [content, setContent] = useState('')
     const [sector, setSector] = useState('semantic')
     const [tags, setTags] = useState('')
-    const [namespaces, setNamespaces] = useState('default')
+    const [namespaces, setNamespaces] = useState('global')
+    const [useLangGraph, setUseLangGraph] = useState(false)
+    const [lgNode, setLgNode] = useState('observe')
+    const [graphId, setGraphId] = useState('')
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-black rounded-xl p-6 max-w-2xl w-full mx-4 border border-stone-800">
+            <div className="bg-black rounded-xl p-6 max-w-2xl w-full mx-4 border border-stone-800 max-h-[90vh] overflow-y-auto">
                 <h2 className="text-xl text-white mb-4">Add New Memory</h2>
                 <div className="space-y-4">
+                    {/* API Type Toggle */}
+                    <div className="flex items-center space-x-3 p-3 bg-stone-900 rounded-lg border border-stone-800">
+                        <input
+                            type="checkbox"
+                            id="useLangGraph"
+                            checked={useLangGraph}
+                            onChange={(e) => setUseLangGraph(e.target.checked)}
+                            className="w-4 h-4 rounded border-stone-700 bg-stone-950 checked:bg-sky-500"
+                        />
+                        <label htmlFor="useLangGraph" className="text-stone-300 text-sm flex items-center space-x-2">
+                            <span>Use LangGraph API</span>
+                            <span className="text-xs text-stone-500">(for graph-based memory storage)</span>
+                        </label>
+                    </div>
+
                     <div>
                         <label className="text-stone-400 text-sm mb-2 block">Content</label>
                         <textarea
@@ -409,30 +472,74 @@ function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (conte
                             placeholder="Enter memory content..."
                         />
                     </div>
+                    
                     <div>
-                        <label className="text-stone-400 text-sm mb-2 block">Namespaces (comma-separated)</label>
+                        <label className="text-stone-400 text-sm mb-2 block">
+                            {useLangGraph ? 'Namespace' : 'Namespaces (comma-separated)'}
+                        </label>
                         <input
                             type="text"
                             value={namespaces}
                             onChange={(e) => setNamespaces(e.target.value)}
                             className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
-                            placeholder="default, project-a, team-alpha"
+                            placeholder={useLangGraph ? "global" : "global, project-a, team-alpha"}
                         />
+                        {useLangGraph && (
+                            <p className="text-xs text-stone-500 mt-1">LangGraph uses a single namespace</p>
+                        )}
                     </div>
-                    <div>
-                        <label className="text-stone-400 text-sm mb-2 block">Sector</label>
-                        <select
-                            value={sector}
-                            onChange={(e) => setSector(e.target.value)}
-                            className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
-                        >
-                            <option value="semantic">Semantic</option>
-                            <option value="episodic">Episodic</option>
-                            <option value="procedural">Procedural</option>
-                            <option value="emotional">Emotional</option>
-                            <option value="reflective">Reflective</option>
-                        </select>
-                    </div>
+
+                    {useLangGraph ? (
+                        <>
+                            <div>
+                                <label className="text-stone-400 text-sm mb-2 block">Node Type</label>
+                                <select
+                                    value={lgNode}
+                                    onChange={(e) => setLgNode(e.target.value)}
+                                    className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
+                                >
+                                    <option value="observe">Observe (Episodic)</option>
+                                    <option value="plan">Plan (Semantic)</option>
+                                    <option value="reflect">Reflect (Reflective)</option>
+                                    <option value="act">Act (Procedural)</option>
+                                    <option value="emotion">Emotion (Emotional)</option>
+                                </select>
+                                <p className="text-xs text-stone-500 mt-1">
+                                    Node type determines the memory sector
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="text-stone-400 text-sm mb-2 block">Graph ID (optional)</label>
+                                <input
+                                    type="text"
+                                    value={graphId}
+                                    onChange={(e) => setGraphId(e.target.value)}
+                                    className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
+                                    placeholder="graph-session-123"
+                                />
+                                <p className="text-xs text-stone-500 mt-1">
+                                    Groups memories by graph session
+                                </p>
+                            </div>
+                        </>
+                    ) : (
+                        <div>
+                            <label className="text-stone-400 text-sm mb-2 block">Sector</label>
+                            <select
+                                value={sector}
+                                onChange={(e) => setSector(e.target.value)}
+                                className="w-full bg-stone-950 rounded-xl border border-stone-800 outline-none p-3 text-stone-300"
+                            >
+                                <option value="semantic">Semantic</option>
+                                <option value="episodic">Episodic</option>
+                                <option value="procedural">Procedural</option>
+                                <option value="emotional">Emotional</option>
+                                <option value="reflective">Reflective</option>
+                            </select>
+                        </div>
+                    )}
+
                     <div>
                         <label className="text-stone-400 text-sm mb-2 block">Tags (comma-separated)</label>
                         <input
@@ -446,7 +553,7 @@ function AddMemoryModal({ onClose, onAdd }: { onClose: () => void; onAdd: (conte
                 </div>
                 <div className="flex space-x-3 mt-6">
                     <button
-                        onClick={() => onAdd(content, sector, tags, namespaces)}
+                        onClick={() => onAdd(content, sector, tags, namespaces, useLangGraph, lgNode, graphId)}
                         disabled={!content.trim() || !namespaces.trim()}
                         className="flex-1 rounded-xl p-2 bg-sky-500 hover:bg-sky-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >

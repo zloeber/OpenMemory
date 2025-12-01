@@ -3,6 +3,7 @@ import { canonical_token_set } from "../utils/text";
 import { inc_q, dec_q, on_query_hit } from "./decay";
 import { env, tier } from "../core/cfg";
 import { cos_sim, buf_to_vec, vec_to_buf } from "../utils/index";
+import { ensure_namespace_exists } from "../services/namespace";
 export interface sector_cfg {
     model: string;
     decay_lambda: number;
@@ -956,6 +957,11 @@ export async function add_hsg_memory(
     // Ensure namespaces defaults to ["global"]
     const ns = namespaces && namespaces.length > 0 ? namespaces : ["global"];
     const ns_json = JSON.stringify(ns);
+
+    // Ensure all namespaces exist in the database
+    for (const namespace of ns) {
+        await ensure_namespace_exists(namespace);
+    }
 
     const simhash = compute_simhash(content);
     const existing = await q.get_mem_by_simhash.get(simhash);
