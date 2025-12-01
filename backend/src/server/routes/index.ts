@@ -10,6 +10,7 @@ import { metrics_routes } from "./metrics";
 import { chat_routes } from "./chat";
 import { vercel } from "./vercel";
 import { data_routes } from "./data";
+import { sector_config_routes } from "./sectors";
 
 export function routes(app: any) {
     sys(app);
@@ -24,5 +25,6 @@ export function routes(app: any) {
     chat_routes(app);
     vercel(app);
     data_routes(app);
+    sector_config_routes(app);
 }
 

@@ -4,12 +4,15 @@ import { inc_q, dec_q, on_query_hit } from "./decay";
 import { env, tier } from "../core/cfg";
 import { cos_sim, buf_to_vec, vec_to_buf } from "../utils/index";
 import { ensure_namespace_exists } from "../services/namespace";
-export interface sector_cfg {
-    model: string;
-    decay_lambda: number;
-    weight: number;
-    patterns: RegExp[];
-}
+import {
+    get_sector_configs,
+    get_sectors,
+    sector_cfg,
+} from "../core/sectors";
+
+// Re-export types from sectors module
+export type { sector_cfg } from "../core/sectors";
+
 export interface sector_class {
     primary: string;
     additional: string[];
@@ -46,67 +49,13 @@ export interface hsg_q_result {
     salience: number;
     last_seen_at: number;
 }
-export const sector_configs: Record<string, sector_cfg> = {
-    episodic: {
-        model: "episodic-optimized",
-        decay_lambda: 0.015,
-        weight: 1.2,
-        patterns: [
-            /\b(today|yesterday|last\s+week|remember\s+when|that\s+time)\b/i,
-            /\b(I\s+(did|went|saw|met|felt))\b/i,
-            /\b(at\s+\d+:\d+|on\s+\w+day|in\s+\d{4})\b/i,
-            /\b(happened|occurred|experience|event|moment)\b/i,
-        ],
-    },
-    semantic: {
-        model: "semantic-optimized",
-        decay_lambda: 0.005,
-        weight: 1.0,
-        patterns: [
-            /\b(define|definition|meaning|concept|theory)\b/i,
-            /\b(what\s+is|how\s+does|why\s+do|facts?\s+about)\b/i,
-            /\b(principle|rule|law|algorithm|method)\b/i,
-            /\b(knowledge|information|data|research|study)\b/i,
-        ],
-    },
-    procedural: {
-        model: "procedural-optimized",
-        decay_lambda: 0.008,
-        weight: 1.1,
-        patterns: [
-            /\b(how\s+to|step\s+by\s+step|procedure|process)\b/i,
-            /\b(first|then|next|finally|afterwards)\b/i,
-            /\b(install|configure|setup|run|execute)\b/i,
-            /\b(tutorial|guide|instructions|manual)\b/i,
-            /\b(click|press|type|enter|select)\b/i,
-        ],
-    },
-    emotional: {
-        model: "emotional-optimized",
-        decay_lambda: 0.02,
-        weight: 1.3,
-        patterns: [
-            /\b(feel|feeling|felt|emotion|mood)\b/i,
-            /\b(happy|sad|angry|excited|worried|anxious|calm)\b/i,
-            /\b(love|hate|like|dislike|enjoy|fear)\b/i,
-            /\b(amazing|terrible|wonderful|awful|fantastic|horrible)\b/i,
-            /[!]{2,}|[\?\!]{2,}/,
-        ],
-    },
-    reflective: {
-        model: "reflective-optimized",
-        decay_lambda: 0.001,
-        weight: 0.8,
-        patterns: [
-            /\b(think|thinking|thought|reflect|reflection)\b/i,
-            /\b(realize|understand|insight|conclusion|lesson)\b/i,
-            /\b(why|purpose|meaning|significance|impact)\b/i,
-            /\b(philosophy|wisdom|belief|value|principle)\b/i,
-            /\b(should\s+have|could\s+have|if\s+only|what\s+if)\b/i,
-        ],
-    },
-};
-export const sectors = Object.keys(sector_configs);
+
+// Dynamic sector configuration - loaded from config/sectors.yml
+// Use get_sector_configs() to get current config (supports runtime updates)
+export const sector_configs: Record<string, sector_cfg> = get_sector_configs();
+
+// Dynamic sectors list - use get_sectors() for runtime-aware list
+export const sectors = get_sectors();
 export const scoring_weights = {
     similarity: 0.6,
     overlap: 0.2,
@@ -161,7 +110,11 @@ export function classify_content(
     content: string,
     metadata?: any,
 ): sector_class {
-    if (metadata?.sector && sectors.includes(metadata.sector)) {
+    // Use dynamic getter for runtime config changes
+    const currentSectors = get_sectors();
+    const currentConfigs = get_sector_configs();
+    
+    if (metadata?.sector && currentSectors.includes(metadata.sector)) {
         return {
             primary: metadata.sector,
             additional: [],
@@ -169,7 +122,7 @@ export function classify_content(
         };
     }
     const scores: Record<string, number> = {};
-    for (const [sector, config] of Object.entries(sector_configs)) {
+    for (const [sector, config] of Object.entries(currentConfigs)) {
         let score = 0;
         for (const pattern of config.patterns) {
             const matches = content.match(pattern);
@@ -208,7 +161,8 @@ export function calc_decay(
     seg_idx?: number,
     max_seg?: number,
 ): number {
-    const cfg = sector_configs[sec];
+    // Use dynamic getter for runtime config changes
+    const cfg = get_sector_configs()[sec];
     if (!cfg) return init_sal;
     let lambda = cfg.decay_lambda;
     if (seg_idx !== undefined && max_seg !== undefined && max_seg > 0) {
@@ -391,11 +345,14 @@ export function calc_mean_vec(
     emb_res: EmbeddingResult[],
     secs: string[],
 ): number[] {
+    // Use dynamic getter for runtime config changes
+    const currentConfigs = get_sector_configs();
+    
     const dim = emb_res[0].vector.length;
     const wsum = new Array(dim).fill(0);
     const sec_scores = emb_res.map((r) => ({
         vector: r.vector,
-        confidence: sector_configs[r.sector]?.weight || 1.0,
+        confidence: currentConfigs[r.sector]?.weight || 1.0,
     }));
     const beta = hybrid_params.beta;
     const exp_sum = sec_scores.reduce(
@@ -403,7 +360,7 @@ export function calc_mean_vec(
         0,
     );
     for (const result of emb_res) {
-        const sec_wt = sector_configs[result.sector]?.weight || 1.0;
+        const sec_wt = currentConfigs[result.sector]?.weight || 1.0;
         const sm_wt = Math.exp(beta * sec_wt) / exp_sum;
         for (let i = 0; i < dim; i++) {
             wsum[i] += result.vector[i] * sm_wt;
@@ -1000,7 +957,8 @@ export async function add_hsg_memory(
             classification.primary,
             env.summary_max_length,
         );
-        const sec_cfg = sector_configs[classification.primary];
+        // Use dynamic getter for runtime config changes
+        const sec_cfg = get_sector_configs()[classification.primary];
         const init_sal = Math.max(
             0,
             Math.min(1, 0.4 + 0.1 * classification.additional.length),
