@@ -73,7 +73,11 @@ function parse_yaml(yml: string): sectors_config_raw {
         
         // Top-level sector (no indent)
         if (indent === 0 && trimmed.endsWith(":")) {
-            // Save previous sector if exists
+            // Save previous pattern and sector if exists
+            if (current_pattern && current_pattern.pattern) {
+                current_patterns.push(current_pattern as pattern_def);
+                current_pattern = null;
+            }
             if (current_sector && result[current_sector]) {
                 result[current_sector].patterns = current_patterns;
             }
@@ -87,7 +91,6 @@ function parse_yaml(yml: string): sectors_config_raw {
             };
             current_patterns = [];
             in_patterns = false;
-            current_pattern = null;
             continue;
         }
 
@@ -118,7 +121,7 @@ function parse_yaml(yml: string): sectors_config_raw {
                 current_patterns.push(current_pattern as pattern_def);
             }
             
-            // Start new pattern
+            // Start new pattern - the line format is "- pattern: 'value'"
             const rest = trimmed.slice(1).trim();
             if (rest.startsWith("pattern:")) {
                 const patternVal = rest.slice("pattern:".length).trim();
@@ -126,21 +129,24 @@ function parse_yaml(yml: string): sectors_config_raw {
                     pattern: patternVal.replace(/^["']|["']$/g, ""),
                     flags: "",
                 };
+            } else {
+                current_pattern = null;
             }
             continue;
         }
 
         // Pattern properties (indent 6)
         if (indent === 6 && current_pattern && in_patterns) {
-            const [key, ...val_parts] = trimmed.split(":");
-            const val = val_parts.join(":").trim().replace(/^["']|["']$/g, "");
+            const colonIndex = trimmed.indexOf(":");
+            if (colonIndex > 0) {
+                const key = trimmed.slice(0, colonIndex).trim();
+                const val = trimmed.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, "");
 
-            if (key === "pattern") {
-                current_pattern.pattern = val;
-            } else if (key === "flags") {
-                current_pattern.flags = val;
-            } else if (key === "description") {
-                current_pattern.description = val;
+                if (key === "flags") {
+                    current_pattern.flags = val;
+                } else if (key === "description") {
+                    current_pattern.description = val;
+                }
             }
         }
     }

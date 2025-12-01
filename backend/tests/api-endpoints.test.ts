@@ -608,6 +608,153 @@ async function testMetricsNamespace() {
 }
 
 // ============================================================================
+// SECTOR CONFIG ENDPOINTS
+// ============================================================================
+
+async function testSectorConfigGet() {
+    const response = await fetch(`${API_URL}/api/sectors/config`, {
+        headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Sector config get failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.sectors || !Array.isArray(data.sectors)) {
+        throw new Error("Response missing sectors array");
+    }
+    if (!data.config || typeof data.config !== "object") {
+        throw new Error("Response missing config object");
+    }
+    
+    // Verify default sectors are present
+    const expectedSectors = ["episodic", "semantic", "procedural", "emotional", "reflective"];
+    for (const sector of expectedSectors) {
+        if (!data.sectors.includes(sector)) {
+            throw new Error(`Missing expected sector: ${sector}`);
+        }
+        if (!data.config[sector]) {
+            throw new Error(`Missing config for sector: ${sector}`);
+        }
+    }
+}
+
+async function testSectorConfigGetSingle() {
+    const response = await fetch(`${API_URL}/api/sectors/config/semantic`, {
+        headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Sector config get single failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (data.sector !== "semantic") {
+        throw new Error("Response has wrong sector name");
+    }
+    if (!data.config || typeof data.config !== "object") {
+        throw new Error("Response missing config object");
+    }
+    if (!data.config.model || typeof data.config.decay_lambda !== "number") {
+        throw new Error("Config missing required fields");
+    }
+}
+
+async function testSectorConfigGetNonexistent() {
+    const response = await fetch(`${API_URL}/api/sectors/config/nonexistent`, {
+        headers: getHeaders()
+    });
+    
+    if (response.status !== 404) {
+        throw new Error(`Should return 404 for nonexistent sector, got ${response.status}`);
+    }
+}
+
+async function testSectorConfigPatch() {
+    // Get current config first
+    const getResponse = await fetch(`${API_URL}/api/sectors/config/semantic`, {
+        headers: getHeaders()
+    });
+    const originalConfig = await getResponse.json();
+    const originalWeight = originalConfig.config.weight;
+    
+    // Patch the weight
+    const newWeight = originalWeight + 0.1;
+    const response = await fetch(`${API_URL}/api/sectors/config/semantic`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify({
+            weight: newWeight
+        }),
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Sector config patch failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.success) {
+        throw new Error("Patch should return success: true");
+    }
+    
+    // Verify the change
+    const verifyResponse = await fetch(`${API_URL}/api/sectors/config/semantic`, {
+        headers: getHeaders()
+    });
+    const verifyData = await verifyResponse.json();
+    if (verifyData.config.weight !== newWeight) {
+        throw new Error("Weight was not updated correctly");
+    }
+    
+    // Restore original value
+    await fetch(`${API_URL}/api/sectors/config/semantic`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify({
+            weight: originalWeight
+        }),
+    });
+}
+
+async function testSectorConfigReload() {
+    const response = await fetch(`${API_URL}/api/sectors/config/reload`, {
+        method: "POST",
+        headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Sector config reload failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.success) {
+        throw new Error("Reload should return success: true");
+    }
+    if (!Array.isArray(data.sectors)) {
+        throw new Error("Reload should return sectors array");
+    }
+}
+
+async function testSectorStats() {
+    const response = await fetch(`${API_URL}/api/sectors/stats`, {
+        headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Sector stats failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!Array.isArray(data.sectors)) {
+        throw new Error("Stats should return sectors array");
+    }
+    if (!Array.isArray(data.stats)) {
+        throw new Error("Stats should return stats array");
+    }
+}
+
+// ============================================================================
 // DASHBOARD ENDPOINTS
 // ============================================================================
 
@@ -920,6 +1067,16 @@ async function runAllTests() {
     await test("GET /api/metrics", testMetricsEndpoint);
     await test("GET /api/metrics/summary", testMetricsSummary);
     await test("GET /api/metrics/namespaces/:namespace", testMetricsNamespace);
+
+    // Sector Config Endpoints
+    console.log("\n⚙️  Sector Config Endpoints");
+    console.log("-".repeat(50));
+    await test("GET /api/sectors/config", testSectorConfigGet);
+    await test("GET /api/sectors/config/:sector", testSectorConfigGetSingle);
+    await test("GET /api/sectors/config/:sector (nonexistent)", testSectorConfigGetNonexistent);
+    await test("PATCH /api/sectors/config/:sector", testSectorConfigPatch);
+    await test("POST /api/sectors/config/reload", testSectorConfigReload);
+    await test("GET /api/sectors/stats", testSectorStats);
 
     // Dashboard Endpoints
     console.log("\n📈 Dashboard Endpoints");
