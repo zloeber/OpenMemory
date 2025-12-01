@@ -1,5 +1,5 @@
 import { all_async } from "../../core/db";
-import { sector_configs } from "../../memory/hsg";
+import { get_sector_configs, get_raw_config, get_sectors } from "../../core/sectors";
 import { getEmbeddingInfo } from "../../memory/embed";
 import { tier, env } from "../../core/cfg";
 
@@ -102,9 +102,10 @@ export function sys(app: any) {
                 from memories 
                 group by primary_sector
             `);
+                // Use dynamic getters for runtime config changes
                 outgoing_http_response.json({
-                    sectors: Object.keys(sector_configs),
-                    configs: sector_configs,
+                    sectors: get_sectors(),
+                    configs: get_raw_config(),
                     stats: database_sector_statistics_rows,
                 });
             } catch (unexpected_error_fetching_sectors) {

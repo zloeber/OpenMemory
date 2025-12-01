@@ -1,6 +1,6 @@
 ﻿import { env, tier } from "../core/cfg";
 import { get_model } from "../core/models";
-import { sector_configs } from "./hsg";
+import { get_sector_configs } from "../core/sectors";
 import { q } from "../core/db";
 import { canonical_tokens_from_text, add_synonym_tokens } from "../utils/text";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
@@ -61,7 +61,8 @@ const fuse_vecs = (syn: number[], sem: number[]): number[] => {
 };
 
 export async function embedForSector(t: string, s: string): Promise<number[]> {
-    if (!sector_configs[s]) throw new Error(`Unknown sector: ${s}`);
+    // Use dynamic getter for runtime config changes
+    if (!get_sector_configs()[s]) throw new Error(`Unknown sector: ${s}`);
     if (tier === "hybrid") return gen_syn_emb(t, s);
     if (tier === "smart" && env.emb_kind !== "synthetic") {
         const syn = gen_syn_emb(t, s),

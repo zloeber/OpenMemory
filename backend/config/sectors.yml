@@ -1,0 +1,102 @@
+# OpenMemory Sector Configuration
+# This file defines the memory sectors and their properties.
+# It can be modified at runtime via the API.
+
+episodic:
+  model: "episodic-optimized"
+  decay_lambda: 0.015
+  weight: 1.2
+  patterns:
+    - pattern: '\b(today|yesterday|last\s+week|remember\s+when|that\s+time)\b'
+      flags: 'i'
+      description: "Time markers"
+    - pattern: '\b(I\s+(did|went|saw|met|felt))\b'
+      flags: 'i'
+      description: "First-person actions"
+    - pattern: '\b(at\s+\d+:\d+|on\s+\w+day|in\s+\d{4})\b'
+      flags: 'i'
+      description: "Temporal specificity"
+    - pattern: '\b(happened|occurred|experience|event|moment)\b'
+      flags: 'i'
+      description: "Event vocabulary"
+
+semantic:
+  model: "semantic-optimized"
+  decay_lambda: 0.005
+  weight: 1.0
+  patterns:
+    - pattern: '\b(define|definition|meaning|concept|theory)\b'
+      flags: 'i'
+      description: "Definition language"
+    - pattern: '\b(what\s+is|how\s+does|why\s+do|facts?\s+about)\b'
+      flags: 'i'
+      description: "Question forms"
+    - pattern: '\b(principle|rule|law|algorithm|method)\b'
+      flags: 'i'
+      description: "Knowledge vocabulary"
+    - pattern: '\b(knowledge|information|data|research|study)\b'
+      flags: 'i'
+      description: "Information vocabulary"
+
+procedural:
+  model: "procedural-optimized"
+  decay_lambda: 0.008
+  weight: 1.1
+  patterns:
+    - pattern: '\b(how\s+to|step\s+by\s+step|procedure|process)\b'
+      flags: 'i'
+      description: "Instruction language"
+    - pattern: '\b(first|then|next|finally|afterwards)\b'
+      flags: 'i'
+      description: "Sequence markers"
+    - pattern: '\b(install|configure|setup|run|execute)\b'
+      flags: 'i'
+      description: "Action verbs"
+    - pattern: '\b(tutorial|guide|instructions|manual)\b'
+      flags: 'i'
+      description: "Documentation vocabulary"
+    - pattern: '\b(click|press|type|enter|select)\b'
+      flags: 'i'
+      description: "UI interaction verbs"
+
+emotional:
+  model: "emotional-optimized"
+  decay_lambda: 0.02
+  weight: 1.3
+  patterns:
+    - pattern: '\b(feel|feeling|felt|emotion|mood)\b'
+      flags: 'i'
+      description: "Feeling words"
+    - pattern: '\b(happy|sad|angry|excited|worried|anxious|calm)\b'
+      flags: 'i'
+      description: "Affect descriptors"
+    - pattern: '\b(love|hate|like|dislike|enjoy|fear)\b'
+      flags: 'i'
+      description: "Preferences"
+    - pattern: '\b(amazing|terrible|wonderful|awful|fantastic|horrible)\b'
+      flags: 'i'
+      description: "Intensity words"
+    - pattern: '[!]{2,}|[\?\!]{2,}'
+      flags: ''
+      description: "Emphasis markers"
+
+reflective:
+  model: "reflective-optimized"
+  decay_lambda: 0.001
+  weight: 0.8
+  patterns:
+    - pattern: '\b(think|thinking|thought|reflect|reflection)\b'
+      flags: 'i'
+      description: "Meta-cognition"
+    - pattern: '\b(realize|understand|insight|conclusion|lesson)\b'
+      flags: 'i'
+      description: "Insight language"
+    - pattern: '\b(why|purpose|meaning|significance|impact)\b'
+      flags: 'i'
+      description: "Purpose-seeking"
+    - pattern: '\b(philosophy|wisdom|belief|value|principle)\b'
+      flags: 'i'
+      description: "Philosophy vocabulary"
+    - pattern: '\b(should\s+have|could\s+have|if\s+only|what\s+if)\b'
+      flags: 'i'
+      description: "Conditional reasoning"

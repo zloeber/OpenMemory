@@ -8,8 +8,8 @@ import {
     add_hsg_memory,
     hsg_query,
     reinforce_memory,
-    sector_configs,
 } from "../memory/hsg";
+import { get_raw_config } from "../core/sectors";
 import { q, all_async, memories_table } from "../core/db";
 import { getEmbeddingInfo } from "../memory/embed";
 import { j, p } from "../utils";
@@ -350,7 +350,7 @@ export const create_mcp_srv = () => {
             );
             const pay = {
                 mode: env.mode,
-                sectors: sector_configs,
+                sectors: get_raw_config(),
                 stats,
                 embeddings: getEmbeddingInfo(),
                 server: { version: "2.1.0", protocol: "2025-06-18" },
