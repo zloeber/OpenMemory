@@ -1,3 +1,4 @@
+import { env } from "../../core/cfg";
 import { sys } from "./system";
 import { mem } from "./memory";
 import { dynroutes } from "./dynamics";
@@ -8,6 +9,7 @@ import { usr } from "./users";
 import { temporal } from "./temporal";
 import { dash } from "./dashboard";
 import { vercel } from "./vercel";
+import { swagger } from "./swagger";
 
 export function routes(app: any) {
     sys(app);
@@ -20,5 +22,10 @@ export function routes(app: any) {
     temporal(app);
     dash(app);
     vercel(app);
+    
+    // Enable Swagger UI if configured
+    if (env.swagger_enabled) {
+        swagger(app);
+    }
 }
 

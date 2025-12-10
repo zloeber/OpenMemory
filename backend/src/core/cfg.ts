@@ -116,4 +116,5 @@ export const env = {
     keyword_boost: num(process.env.OM_KEYWORD_BOOST, 2.5),
     keyword_min_length: num(process.env.OM_KEYWORD_MIN_LENGTH, 3),
     sector_pattern_file: defaultSectorPatternFile,
+    swagger_enabled: bool(process.env.OM_SWAGGER_ENABLED),
 };
