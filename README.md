@@ -261,6 +261,29 @@ npm run dev
 
 ---
 
+# API Documentation (Swagger)
+
+OpenMemory includes optional Swagger/OpenAPI documentation for interactive API exploration:
+
+* 🎨 **Interactive UI** - Test all endpoints directly from your browser
+* 📝 **Auto-generated** - Always in sync with the codebase
+* 🔐 **Authentication** - Test authenticated endpoints with API keys
+
+### Enable Swagger
+
+Add to your `.env`:
+```
+OM_SWAGGER_ENABLED=true
+```
+
+Then access:
+* **Swagger UI**: http://localhost:8080/api-docs
+* **OpenAPI JSON**: http://localhost:8080/api-docs.json
+
+See [backend/docs/SWAGGER.md](backend/docs/SWAGGER.md) for full documentation.
+
+---
+
 # VS Code Extension
 
 The official **OpenMemory VS Code extension** gives AI assistants access to your coding history, project evolution, and file context.
