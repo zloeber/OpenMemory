@@ -3,6 +3,7 @@ import { canonical_token_set } from "../utils/text";
 import { inc_q, dec_q, on_query_hit } from "./decay";
 import { env, tier } from "../core/cfg";
 import { cos_sim, buf_to_vec, vec_to_buf } from "../utils/index";
+import { getSectorPatterns } from "../config/sector_patterns";
 export interface sector_cfg {
     model: string;
     decay_lambda: number;
@@ -45,64 +46,38 @@ export interface hsg_q_result {
     salience: number;
     last_seen_at: number;
 }
+const sectorPatterns = getSectorPatterns();
+
 export const sector_configs: Record<string, sector_cfg> = {
     episodic: {
         model: "episodic-optimized",
         decay_lambda: 0.015,
         weight: 1.2,
-        patterns: [
-            /\b(today|yesterday|last\s+week|remember\s+when|that\s+time)\b/i,
-            /\b(I\s+(did|went|saw|met|felt))\b/i,
-            /\b(at\s+\d+:\d+|on\s+\w+day|in\s+\d{4})\b/i,
-            /\b(happened|occurred|experience|event|moment)\b/i,
-        ],
+        patterns: sectorPatterns.episodic ?? [],
     },
     semantic: {
         model: "semantic-optimized",
         decay_lambda: 0.005,
         weight: 1.0,
-        patterns: [
-            /\b(define|definition|meaning|concept|theory)\b/i,
-            /\b(what\s+is|how\s+does|why\s+do|facts?\s+about)\b/i,
-            /\b(principle|rule|law|algorithm|method)\b/i,
-            /\b(knowledge|information|data|research|study)\b/i,
-        ],
+        patterns: sectorPatterns.semantic ?? [],
     },
     procedural: {
         model: "procedural-optimized",
         decay_lambda: 0.008,
         weight: 1.1,
-        patterns: [
-            /\b(how\s+to|step\s+by\s+step|procedure|process)\b/i,
-            /\b(first|then|next|finally|afterwards)\b/i,
-            /\b(install|configure|setup|run|execute)\b/i,
-            /\b(tutorial|guide|instructions|manual)\b/i,
-            /\b(click|press|type|enter|select)\b/i,
-        ],
+        patterns: sectorPatterns.procedural ?? [],
     },
     emotional: {
         model: "emotional-optimized",
         decay_lambda: 0.02,
         weight: 1.3,
-        patterns: [
-            /\b(feel|feeling|felt|emotion|mood)\b/i,
-            /\b(happy|sad|angry|excited|worried|anxious|calm)\b/i,
-            /\b(love|hate|like|dislike|enjoy|fear)\b/i,
-            /\b(amazing|terrible|wonderful|awful|fantastic|horrible)\b/i,
-            /[!]{2,}|[\?\!]{2,}/,
-        ],
+        patterns: sectorPatterns.emotional ?? [],
     },
     reflective: {
         model: "reflective-optimized",
         decay_lambda: 0.001,
         weight: 0.8,
-        patterns: [
-            /\b(think|thinking|thought|reflect|reflection)\b/i,
-            /\b(realize|understand|insight|conclusion|lesson)\b/i,
-            /\b(why|purpose|meaning|significance|impact)\b/i,
-            /\b(philosophy|wisdom|belief|value|principle)\b/i,
-            /\b(should\s+have|could\s+have|if\s+only|what\s+if)\b/i,
-        ],
+        patterns: sectorPatterns.reflective ?? [],
     },
 };
 export const sectors = Object.keys(sector_configs);

@@ -1,0 +1,193 @@
+ontology:
+  name: "fantasy_dungeon_master_ontology"
+  version: "1.0"
+  domain: "fantasy_rpg_world"
+  description: "Ontology for an AI dungeon master managing characters, quests, events, monsters, and world states."
+
+  metadata:
+    author: "system"
+    created: "2025-11-17"
+    modified: "2025-11-17"
+    source_standards:
+      - "Dungeons & Dragons 5e SRD"
+      - "Narrative Story Arc Models"
+
+  memory_mappings:
+    semantic: ["Character", "Monster", "Item", "Location"]
+    episodic: ["Encounter", "QuestEvent", "BattleOutcome"]
+    procedural: ["Skill", "Spell", "Rule"]
+    reflective: ["Clue", "LoreFragment"]
+    emotional: ["CharacterEmotion"]
+    temporal: ["StoryArc", "WorldStateChange"]
+
+  entities:
+    - name: "Character"
+      description: "A player or NPC character."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "race"
+          type: "string"
+        - name: "class"
+          type: "string"
+        - name: "level"
+          type: "int"
+      memory_type: "semantic"
+
+    - name: "Monster"
+      description: "Enemy entity encountered in the world."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "species"
+          type: "string"
+        - name: "challenge_rating"
+          type: "float"
+      memory_type: "semantic"
+
+    - name: "Item"
+      description: "Object that characters can use or carry."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "type"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Location"
+      description: "A world location or area."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "terrain"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Encounter"
+      description: "An event involving characters and monsters."
+      attributes:
+        - name: "timestamp"
+          type: "datetime"
+        - name: "description"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "QuestEvent"
+      description: "A quest milestone."
+      attributes:
+        - name: "summary"
+          type: "string"
+        - name: "timestamp"
+          type: "datetime"
+      memory_type: "episodic"
+
+    - name: "BattleOutcome"
+      description: "The result of a combat event."
+      attributes:
+        - name: "details"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "Skill"
+      description: "A character skill with procedural steps."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "effect"
+          type: "string"
+      memory_type: "procedural"
+
+    - name: "Clue"
+      description: "A hint or mystery-related detail."
+      attributes:
+        - name: "description"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "LoreFragment"
+      description: "Piece of historical or world lore."
+      attributes:
+        - name: "content"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "CharacterEmotion"
+      description: "Emotional state of a character."
+      attributes:
+        - name: "type"
+          type: "string"
+        - name: "intensity"
+          type: "int"
+      memory_type: "emotional"
+
+  relationships:
+    - name: "located_in"
+      description: "Character is in a location."
+      from: "Character"
+      to: "Location"
+      type: "association"
+      cardinality: "1:1"
+      memory_type: "semantic"
+
+    - name: "carries_item"
+      description: "Character owns or carries an item."
+      from: "Character"
+      to: "Item"
+      type: "association"
+      cardinality: "1:N"
+      memory_type: "semantic"
+
+    - name: "engaged_in_encounter"
+      description: "Character participates in an encounter."
+      from: "Character"
+      to: "Encounter"
+      type: "episodic"
+      cardinality: "N:M"
+      memory_type: "episodic"
+
+    - name: "fought_monster"
+      description: "Encounter includes a monster."
+      from: "Encounter"
+      to: "Monster"
+      type: "association"
+      cardinality: "N:M"
+      memory_type: "episodic"
+
+    - name: "produced_outcome"
+      description: "Encounter yields a battle outcome."
+      from: "Encounter"
+      to: "BattleOutcome"
+      type: "causal"
+      cardinality: "1:1"
+      memory_type: "episodic"
+
+    - name: "has_emotion"
+      description: "Character feels an emotion."
+      from: "Character"
+      to: "CharacterEmotion"
+      type: "emotional"
+      cardinality: "1:N"
+      memory_type: "emotional"
+
+    - name: "related_lore"
+      description: "Clue connects to a lore fragment."
+      from: "Clue"
+      to: "LoreFragment"
+      type: "association"
+      cardinality: "N:M"
+      memory_type: "reflective"
+
+  rules:
+    inference:
+      - id: "infer_story_arc_change"
+        description: "Quest events over time infer story arc progression."
+        if:
+          - "QuestEvent.timestamp exists"
+        then:
+          - "update StoryArc"
+
+    validation:
+      - id: "challenge_rating_positive"
+        description: "Challenge rating must be > 0"
+        applies_to: "Monster"
+        rule: "challenge_rating > 0"

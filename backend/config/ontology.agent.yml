@@ -1,0 +1,281 @@
+ontology:
+  name: "default_agentic_memory_ontology"
+  version: "1.0"
+  domain: "general_agent_framework"
+  description: "A domain-agnostic ontology for agentic workloads, capturing tasks, actions, tools, events, reasoning, and user interactions."
+
+  metadata:
+    author: "system"
+    created: "2025-11-17"
+    modified: "2025-11-17"
+    source_standards:
+      - "schema.org"
+      - "W3C PROV"
+      - "OpenAI Open Memory Types"
+      - "autonomous agent design patterns"
+
+  memory_mappings:
+    semantic:
+      - "Task"
+      - "Goal"
+      - "Tool"
+      - "Agent"
+      - "User"
+      - "Knowledge"
+      - "Entity"
+    episodic:
+      - "Event"
+      - "ActionExecution"
+      - "Interaction"
+      - "ErrorEvent"
+    procedural:
+      - "Procedure"
+      - "Skill"
+      - "Workflow"
+    reflective:
+      - "Insight"
+      - "ReasoningTrace"
+      - "LessonLearned"
+    emotional:
+      - "UserSentiment"
+      - "InteractionAffect"
+    temporal:
+      - "StateChange"
+      - "TimelineEntry"
+
+  entities:
+    - name: "Agent"
+      description: "A system component capable of performing tasks, reasoning, or taking actions."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "role"
+          type: "string"
+        - name: "capabilities"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "User"
+      description: "Human controller or requester for agent actions."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "preferences"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Goal"
+      description: "A desired end-state or objective."
+      attributes:
+        - name: "description"
+          type: "string"
+        - name: "deadline"
+          type: "datetime"
+      memory_type: "semantic"
+
+    - name: "Task"
+      description: "A unit of work assigned to an agent."
+      attributes:
+        - name: "title"
+          type: "string"
+        - name: "status"
+          type: "string"
+          enum: ["pending", "in_progress", "completed", "failed"]
+        - name: "created_at"
+          type: "datetime"
+      memory_type: "semantic"
+
+    - name: "Procedure"
+      description: "A reusable set of steps to accomplish a task."
+      attributes:
+        - name: "steps"
+          type: "string"
+      memory_type: "procedural"
+
+    - name: "Tool"
+      description: "External or internal tool used by the agent."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "type"
+          type: "string"
+        - name: "capabilities"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Knowledge"
+      description: "Agent-accessible general information or facts."
+      attributes:
+        - name: "content"
+          type: "string"
+        - name: "source"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Entity"
+      description: "Generic entity extracted from data (people, objects, concepts)."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "kind"
+          type: "string"
+      memory_type: "semantic"
+
+    - name: "Event"
+      description: "An episodic occurrence relevant to agent behavior."
+      attributes:
+        - name: "timestamp"
+          type: "datetime"
+        - name: "summary"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "ActionExecution"
+      description: "A record of an action the agent took."
+      attributes:
+        - name: "action"
+          type: "string"
+        - name: "parameters"
+          type: "string"
+        - name: "result"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "ErrorEvent"
+      description: "An error produced by an agent or tool."
+      attributes:
+        - name: "error_message"
+          type: "string"
+        - name: "context"
+          type: "string"
+      memory_type: "episodic"
+
+    - name: "Skill"
+      description: "An agent capability implemented as a procedural pattern."
+      attributes:
+        - name: "name"
+          type: "string"
+        - name: "description"
+          type: "string"
+      memory_type: "procedural"
+
+    - name: "Insight"
+      description: "A reflective understanding derived from experience."
+      attributes:
+        - name: "content"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "LessonLearned"
+      description: "A reflection that guides future decisions."
+      attributes:
+        - name: "lesson"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "ReasoningTrace"
+      description: "A meta-level trace of how an agent arrived at a conclusion."
+      attributes:
+        - name: "content"
+          type: "string"
+      memory_type: "reflective"
+
+    - name: "UserSentiment"
+      description: "Emotional state of user detected from text or speech."
+      attributes:
+        - name: "sentiment"
+          type: "string"
+          enum: ["positive", "neutral", "negative"]
+        - name: "intensity"
+          type: "int"
+      memory_type: "emotional"
+
+    - name: "StateChange"
+      description: "A record of how something changed over time."
+      attributes:
+        - name: "state_before"
+          type: "string"
+        - name: "state_after"
+          type: "string"
+        - name: "timestamp"
+          type: "datetime"
+      memory_type: "temporal"
+
+  relationships:
+    - name: "assigned_to"
+      description: "A task is assigned to an agent."
+      from: "Task"
+      to: "Agent"
+      type: "association"
+      cardinality: "N:1"
+      memory_type: "semantic"
+
+    - name: "has_goal"
+      description: "A user or agent has goals."
+      from: "User"
+      to: "Goal"
+      type: "association"
+      cardinality: "1:N"
+      memory_type: "semantic"
+
+    - name: "performs_action"
+      description: "Agent executes an action."
+      from: "Agent"
+      to: "ActionExecution"
+      type: "temporal"
+      cardinality: "1:N"
+      memory_type: "episodic"
+
+    - name: "uses_tool"
+      description: "An action uses a specific tool."
+      from: "ActionExecution"
+      to: "Tool"
+      type: "association"
+      cardinality: "N:1"
+      memory_type: "episodic"
+
+    - name: "caused_error"
+      description: "An action resulted in an error."
+      from: "ActionExecution"
+      to: "ErrorEvent"
+      type: "causal"
+      cardinality: "1:N"
+      memory_type: "episodic"
+
+    - name: "produced_insight"
+      description: "An event leads to an insight."
+      from: "Event"
+      to: "Insight"
+      type: "causal"
+      cardinality: "1:N"
+      memory_type: "reflective"
+
+    - name: "updated_state"
+      description: "Event results in a state change."
+      from: "Event"
+      to: "StateChange"
+      type: "temporal"
+      cardinality: "1:N"
+      memory_type: "temporal"
+
+  rules:
+    inference:
+      - id: "infer_skill_usage"
+        description: "If an agent repeatedly performs similar actions, infer a new skill."
+        if:
+          - "ActionExecution.action repeats > 3"
+        then:
+          - "create Skill(name=action, description='Learned from repetition')"
+
+      - id: "infer_user_preference"
+        description: "If user sentiment consistently improves after a type of output, infer preference."
+        if:
+          - "UserSentiment.sentiment == 'positive'"
+        then:
+          - "update User.preferences"
+
+    validation:
+      - id: "task_status_valid"
+        description: "Ensure task status is one of the accepted enum values."
+        applies_to: "Task"
+        rule: "status in ['pending','in_progress','completed','failed']"

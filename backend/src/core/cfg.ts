@@ -7,6 +7,14 @@ const str = (v: string | undefined, d: string) => v || d;
 const bool = (v: string | undefined) => v === "true";
 type tier = "fast" | "smart" | "deep" | "hybrid";
 
+const defaultSectorPatternFile = (() => {
+    const configured = process.env.OM_SECTOR_PATTERN_FILE;
+    const candidate = configured && configured.trim().length > 0
+        ? configured.trim()
+        : "config/sectorpatterns.default.yml";
+    return path.resolve(process.cwd(), candidate);
+})();
+
 const get_tier = (): tier => {
     const man = process.env.OM_TIER as tier;
     if (man && ["fast", "smart", "deep", "hybrid"].includes(man)) return man;
@@ -107,4 +115,5 @@ export const env = {
     summary_layers: num(process.env.OM_SUMMARY_LAYERS, 3),
     keyword_boost: num(process.env.OM_KEYWORD_BOOST, 2.5),
     keyword_min_length: num(process.env.OM_KEYWORD_MIN_LENGTH, 3),
+    sector_pattern_file: defaultSectorPatternFile,
 };

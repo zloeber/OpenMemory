@@ -1,0 +1,45 @@
+episodic:
+  - pattern: '/(today|yesterday|last\s+week|remember\s+when)/i'
+    description: "Time markers"
+  - pattern: '/\b(I\s+(did|went|saw|met|felt))\b/i'
+    description: "First-person actions"
+  - pattern: '/\b(at\s+\d+:\d+|on\s+\w+day|in\s+\d{4})\b/i'
+    description: "Temporal specificity"
+  - pattern: '/(happened|occurred|experience|event|moment)/i'
+    description: "Event vocabulary"
+
+semantic:
+  - pattern: '/(define|definition|meaning|concept|theory)/i'
+    description: "Definition language"
+  - pattern: '/(what\s+is|how\s+does|why\s+do|facts?\s+about)/i'
+    description: "Question forms"
+  - pattern: '/(principle|rule|law|algorithm|method)/i'
+    description: "Knowledge vocabulary"
+
+procedural:
+  - pattern: '/(how\s+to|step\s+by\s+step|procedure|process)/i'
+    description: "Instruction language"
+  - pattern: '/(first|then|next|finally|afterwards)/i'
+    description: "Sequence markers"
+  - pattern: '/(install|configure|setup|run|execute)/i'
+    description: "Action verbs"
+
+emotional:
+  - pattern: '/(feel|feeling|felt|emotion|mood)/i'
+    description: "Feeling words"
+  - pattern: '/(happy|sad|angry|excited|worried|anxious)/i'
+    description: "Affect descriptors"
+  - pattern: '/(love|hate|like|dislike|enjoy|fear)/i'
+    description: "Preferences"
+  - pattern: '/[!]{2,}/i'
+    description: "Emphasis markers (multiple exclamation points)"
+
+reflective:
+  - pattern: '/(think|thinking|thought|reflect|reflection)/i'
+    description: "Meta-cognition"
+  - pattern: '/(realize|understand|insight|conclusion|lesson)/i'
+    description: "Insight language"
+  - pattern: '/(why|purpose|meaning|significance|impact)/i'
+    description: "Purpose-seeking"
+  - pattern: '/(should\s+have|could\s+have|if\s+only|what\s+if)/i'
+    description: "Conditional reasoning"
