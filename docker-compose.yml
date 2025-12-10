@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   openmemory:
     build:
@@ -9,6 +7,7 @@ services:
       - '8080:8080'
     environment:
       # Core Configuration
+      - OM_SWAGGER_ENABLED=${OM_SWAGGER_ENABLED:-true}
       - OM_PORT=${OM_PORT:-8080}
       - OM_MODE=${OM_MODE:-standard}
       - OM_TIER=${OM_TIER:-hybrid}
