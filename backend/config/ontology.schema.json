@@ -1,0 +1,257 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Ontology Schema",
+    "description": "Schema for defining domain-specific ontologies with memory mappings",
+    "type": "object",
+    "required": ["ontology"],
+    "properties": {
+        "ontology": {
+            "type": "object",
+            "required": ["name", "version", "domain", "description"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Unique ontology name"
+                },
+                "version": {
+                    "type": "string",
+                    "default": "1.0"
+                },
+                "domain": {
+                    "type": "string",
+                    "description": "Domain of use (e.g., psychology, gaming, finance)"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "High-level description of the ontology"
+                },
+                "metadata": {
+                    "type": "object",
+                    "properties": {
+                        "author": {
+                            "type": "string"
+                        },
+                        "created": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "modified": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "source_standards": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Optional references (FOAF, SKOS, schema.org, DSM-5, etc.)"
+                        }
+                    }
+                },
+                "memory_mappings": {
+                    "type": "object",
+                    "properties": {
+                        "semantic": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Entities, stable facts"
+                        },
+                        "episodic": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Events, interactions, time series"
+                        },
+                        "procedural": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Workflows, actions"
+                        },
+                        "reflective": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Rules, insights, evaluations"
+                        },
+                        "emotional": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Sentiment, affective state"
+                        },
+                        "temporal": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Time-based relationships, state changes"
+                        }
+                    }
+                },
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "description"],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "e.g., Person, Monster, Quest, Emotion"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "attributes": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "required": ["name", "type"],
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["string", "int", "float", "enum", "datetime", "boolean", "entity_ref"]
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "required": {
+                                            "type": "boolean",
+                                            "default": false
+                                        },
+                                        "enum": {
+                                            "type": "array",
+                                            "items": { "type": "string" }
+                                        }
+                                    }
+                                }
+                            },
+                            "memory_type": {
+                                "type": "string",
+                                "enum": ["semantic", "episodic", "procedural", "reflective", "emotional", "temporal"]
+                            }
+                        }
+                    }
+                },
+                "relationships": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "description", "from", "to", "type"],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "e.g., owns_pet, therapist_of, in_party_with"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "from": {
+                                "type": "string",
+                                "description": "Source entity"
+                            },
+                            "to": {
+                                "type": "string",
+                                "description": "Target entity"
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": ["association", "hierarchy", "causal", "temporal", "emotional"]
+                            },
+                            "cardinality": {
+                                "type": "string",
+                                "enum": ["1:1", "1:N", "N:M"]
+                            },
+                            "memory_type": {
+                                "type": "string",
+                                "enum": ["semantic", "episodic", "procedural", "reflective", "emotional", "temporal"]
+                            },
+                            "properties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "required": ["name", "type"],
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "rules": {
+                    "type": "object",
+                    "properties": {
+                        "inference": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "description"],
+                                "properties": {
+                                    "id": {
+                                        "type": "string"
+                                    },
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "if": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    },
+                                    "then": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    }
+                                }
+                            },
+                            "description": "Logical rules, classification rules, heuristics"
+                        },
+                        "validation": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "description", "applies_to", "rule"],
+                                "properties": {
+                                    "id": {
+                                        "type": "string"
+                                    },
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "applies_to": {
+                                        "type": "string",
+                                        "enum": ["entity", "relationship"]
+                                    },
+                                    "rule": {
+                                        "type": "string",
+                                        "description": "e.g., age >= 0, start_time < end_time"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "examples": {
+                    "type": "object",
+                    "properties": {
+                        "entities": {
+                            "type": "array",
+                            "items": { "type": "object" },
+                            "description": "Sample entity documents"
+                        },
+                        "relationships": {
+                            "type": "array",
+                            "items": { "type": "object" },
+                            "description": "Examples of instantiated relationships"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
