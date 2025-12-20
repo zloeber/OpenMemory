@@ -27,6 +27,16 @@ console.log(ASC);
 console.log(`[CONFIG] Vector Dimension: ${env.vec_dim}`);
 console.log(`[CONFIG] Cache Segments: ${env.cache_segments}`);
 console.log(`[CONFIG] Max Active Queries: ${env.max_active}`);
+console.log(`[CONFIG] Embedding Kind: ${env.emb_kind}`);
+console.log(`[CONFIG] Server Mode: ${env.mode}`);
+console.log(`[CONFIG] Decay Interval: ${env.decay_interval_minutes} minutes`);
+console.log(`[CONFIG] Decay Initial Delay: ${env.decay_initial_delay_ms} ms`);
+console.log(`[CONFIG] Decay Enabled: ${env.decay_enabled ? "Yes" : "No"}`);
+console.log(`[CONFIG] Metadata Backend: ${env.metadata_backend}`);
+console.log(`[CONFIG] Vector Backend: ${env.vector_backend}`);
+console.log(`[CONFIG] IDE Mode: ${env.ide_mode ? "Enabled" : "Disabled"}`);
+console.log(`[CONFIG] Swagger: ${env.swagger_enabled ? "Enabled" : "Disabled"}`);
+console.log(`[CONFIG] Swagger URL: ${env.swagger_enabled ? "/api-docs" : "Disabled"}`);
 
 // Warn about configuration mismatch that causes embedding incompatibility
 if (env.emb_kind !== "synthetic" && (tier === "hybrid" || tier === "fast")) {
@@ -71,21 +81,25 @@ if (env.mode === "langgraph") {
 }
 
 const decayIntervalMs = env.decay_interval_minutes * 60 * 1000;
-console.log(
-    `[DECAY] Interval: ${env.decay_interval_minutes} minutes (${decayIntervalMs / 1000}s)`,
-);
+if (env.decay_enabled) {
+    console.log(
+        `[DECAY] Interval: ${env.decay_interval_minutes} minutes (${decayIntervalMs / 1000}s)`,
+    );
 
-setInterval(async () => {
-    console.log("[DECAY] Running HSG decay process...");
-    try {
-        const result = await run_decay_process();
-        console.log(
-            `[DECAY] Completed: ${result.decayed}/${result.processed} memories updated`,
-        );
-    } catch (error) {
-        console.error("[DECAY] Process failed:", error);
-    }
-}, decayIntervalMs);
+    setInterval(async () => {
+        console.log("[DECAY] Running HSG decay process...");
+        try {
+            const result = await run_decay_process();
+            console.log(
+                `[DECAY] Completed: ${result.decayed}/${result.processed} memories updated`,
+            );
+        } catch (error) {
+            console.error("[DECAY] Process failed:", error);
+        }
+    }, decayIntervalMs);
+} else {
+    console.log("[DECAY] Automatic decay disabled; skipping scheduler");
+}
 setInterval(
     async () => {
         console.log("[PRUNE] Pruning weak waypoints...");
@@ -98,13 +112,26 @@ setInterval(
     },
     7 * 24 * 60 * 60 * 1000,
 );
-run_decay_process()
-    .then((result: any) => {
+if (env.decay_enabled) {
+    const initialDecayDelayMs = env.decay_initial_delay_ms;
+    if (initialDecayDelayMs > 0) {
         console.log(
-            `[INIT] Initial decay: ${result.decayed}/${result.processed} memories updated`,
+            `[INIT] Waiting ${initialDecayDelayMs}ms before initial decay run...`,
         );
-    })
-    .catch(console.error);
+    }
+
+    setTimeout(() => {
+        run_decay_process()
+            .then((result: any) => {
+                console.log(
+                    `[INIT] Initial decay: ${result.decayed}/${result.processed} memories updated`,
+                );
+            })
+            .catch((error: unknown) => {
+                console.error("[INIT] Initial decay failed:", error);
+            });
+    }, initialDecayDelayMs);
+}
 
 start_reflection();
 start_user_summary_reflection();

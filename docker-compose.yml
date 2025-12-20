@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${OM_PG_USER:-openmemory}
+      POSTGRES_PASSWORD: ${OM_PG_PASSWORD:-openmemory}
+      POSTGRES_DB: ${OM_PG_DB:-openmemory}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OM_PG_USER:-openmemory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   openmemory:
     build:
       context: ./backend
@@ -71,7 +88,7 @@ services:
       - OM_PG_HOST=${OM_PG_HOST:-}
       - OM_PG_PORT=${OM_PG_PORT:-5432}
       - OM_PG_DB=${OM_PG_DB:-}
-      - OM_PG_USER=${OM_PG_USER:-}
+      - OM_PG_USER=${OM_PG_USER:-openmemory}
       - OM_PG_PASSWORD=${OM_PG_PASSWORD:-}
       - OM_PG_SCHEMA=${OM_PG_SCHEMA:-public}
       - OM_PG_TABLE=${OM_PG_TABLE:-openmemory_memories}
@@ -146,6 +163,8 @@ services:
 
 volumes:
   openmemory_data:
+    driver: local
+  postgres_data:
     driver: local
   # Uncomment if using Valkey
   # valkey_data:

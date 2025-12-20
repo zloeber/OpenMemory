@@ -113,6 +113,24 @@ export const swaggerSpec = {
                     vector_dimensions: { type: "integer" }
                 }
             }
+        },
+        responses: {
+            BadRequest: {
+                description: "Bad request - invalid input",
+                content: {
+                    "application/json": {
+                        schema: { $ref: "#/components/schemas/Error" }
+                    }
+                }
+            },
+            Unauthorized: {
+                description: "Unauthorized - API key required or invalid",
+                content: {
+                    "application/json": {
+                        schema: { $ref: "#/components/schemas/Error" }
+                    }
+                }
+            }
         }
     },
     security: [
